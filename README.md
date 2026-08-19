@@ -1,6 +1,6 @@
 # Vardek Widgets
 
-A collection of **105 custom widgets** for [Vardek](https://github.com/jorgelaurel/Vardek) — the
+A collection of **105 custom widgets** for [Vardek](https://github.com/vardekapp/Vardek) — the
 Mac-native widget dashboard for the [Corsair XENEON EDGE](https://www.corsair.com/us/en/explorer/diy-builder/accessories/xeneon-edge-widgets-explained/)
 (2560×720 touchscreen). Vardek re-implements iCUE's Windows-only widget layer for macOS, and it
 runs the same sandboxed HTML/JS widgets.
@@ -38,7 +38,7 @@ filesystem or arbitrary hosts directly. Those widgets include a `README.md` and 
 
 ## Credits
 
-- Built for **Vardek** by Jorge Laurel — <https://github.com/jorgelaurel/Vardek>
+- Built for **Vardek** — <https://github.com/vardekapp/Vardek>
 - For the **Corsair XENEON EDGE** — <https://www.corsair.com/us/en/explorer/diy-builder/accessories/xeneon-edge-widgets-explained/>
 - Widgets & showcase by [@kevinelliott](https://github.com/kevinelliott)
 

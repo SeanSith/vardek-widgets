@@ -136,3 +136,32 @@ main{padding:44px 24px 70px}
   .nav{width:38px;height:38px;font-size:1.3rem}
   .nav.prev{left:6px}.nav.next{right:6px}
 }
+
+/* ---------- hero device (Corsair Xeneon Edge) ---------- */
+.device{margin:52px auto 0;width:100%;max-width:1040px;display:flex;flex-direction:column;align-items:center}
+.edge{position:relative;width:100%;padding:14px 15px 16px;border-radius:22px;
+  background:linear-gradient(160deg,#2a2d34,#151619 60%,#101013);
+  box-shadow:0 40px 90px -30px rgba(0,0,0,.85),0 6px 20px -8px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.09),inset 0 0 0 1px rgba(255,255,255,.03)}
+.screen{position:relative;width:100%;aspect-ratio:2560/720;border-radius:9px;overflow:hidden;background:#05070c;
+  box-shadow:inset 0 0 0 1px #000,inset 0 0 34px rgba(0,0,0,.6)}
+.screen img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.1s ease}
+.screen img.on{opacity:1}
+.glare{position:absolute;inset:0;z-index:4;pointer-events:none;
+  background:linear-gradient(107deg,rgba(255,255,255,.07),rgba(255,255,255,0) 20%,rgba(255,255,255,0) 82%,rgba(255,255,255,.04));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.powerdot{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;
+  background:#7aa2f7;box-shadow:0 0 8px 1px rgba(122,162,247,.8);opacity:.55}
+.stand{width:44px;height:30px;margin:0 auto;background:linear-gradient(#1b1d23,#0f1014);
+  clip-path:polygon(32% 0,68% 0,100% 100%,0 100%)}
+.foot{width:210px;height:13px;border-radius:7px;margin:0 auto;
+  background:linear-gradient(#22242c,#0d0e12);box-shadow:0 14px 30px -10px rgba(0,0,0,.75),inset 0 1px 0 rgba(255,255,255,.06)}
+#heroCap{margin-top:18px;font-family:var(--mono);font-size:.8rem;color:var(--dim);letter-spacing:.02em;text-align:center}
+@media(max-width:720px){
+  .device{margin-top:34px}
+  .edge{padding:8px 9px 10px;border-radius:14px}
+  .foot{width:140px}
+  #heroCap{font-size:.72rem}
+}
+
+/* modal caption */
+.cap{padding:11px 26px 2px;text-align:center;color:var(--mid);font-size:.9rem;border-top:1px solid var(--border)}
