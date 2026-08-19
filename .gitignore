@@ -4,12 +4,12 @@
 .gstack/
 **/.gstack/
 **/.impeccable/
-
-# generated widget data (daemons regenerate locally)
-**/data.js
-**/data.json
-**/.photocache.json
 **/*.log
+
+# generated widget data (daemons regenerate these locally inside widget dirs)
+widgets/**/data.js
+widgets/**/data.json
+widgets/**/.photocache.json
 
 # daemon-downloaded media (regenerated locally; not source)
 widgets/com.kevin.photoframe/img/
@@ -19,3 +19,4 @@ widgets/com.kevin.epic/img/
 widgets/com.kevin.art/img/
 widgets/com.kevin.cocktail/img/
 widgets/com.kevin.recipe/img/
+widgets/**/.state.json
