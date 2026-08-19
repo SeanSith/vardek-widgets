@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Crypto Market</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--up:#6bd08a;--down:#f7768e;--btc:#f7931a;--eth:#8a92b2;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;padding:24px 30px;gap:30px}
+  .left{flex:0 0 42%;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--border);padding-right:28px}
+  .left .lab{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+  .left .cap{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:3.2rem;line-height:1;margin:4px 0 2px}
+  .left .chg{font-family:var(--mono);font-size:1.1rem;font-weight:700}
+  .left .chg.up{color:var(--up)}.left .chg.down{color:var(--down)}
+  .left .sub{font-family:var(--mono);font-size:.85rem;color:var(--dim);margin-top:2px}
+  .dom{margin-top:22px}
+  .dom .lab{margin-bottom:7px}
+  .dombar{height:20px;border-radius:10px;overflow:hidden;display:flex;border:1px solid var(--border)}
+  .dombar>span{height:100%}
+  .domleg{display:flex;gap:16px;margin-top:8px;font-family:var(--mono);font-size:.85rem}
+  .domleg .i{display:flex;align-items:center;gap:6px;color:var(--mid)}.domleg .i b{color:var(--text)}
+  .domleg .dot{width:10px;height:10px;border-radius:3px}
+  .coins{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+  .coins .h{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+  .coin{display:grid;grid-template-columns:1.6em 1fr auto auto;gap:12px;align-items:center;padding:6.5px 0}
+  .coin+.coin{border-top:1px solid rgba(42,51,80,.5)}
+  .coin .rk{font-family:var(--mono);color:var(--dim);text-align:center;font-size:.9rem}
+  .coin .nm{font-weight:600}.coin .nm .sym{font-family:var(--mono);color:var(--mid);font-size:.8rem;margin-left:5px;text-transform:uppercase}
+  .coin .pr{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;text-align:right}
+  .coin .ch{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;text-align:right;width:5em}
+  .coin .ch.up{color:var(--up)}.coin .ch.down{color:var(--down)}
+  #status{position:fixed;left:30px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="left"><div class="lab">Total market cap</div><div class="cap" id="cap">—</div><div class="chg" id="chg"></div>
+      <div class="sub" id="sub"></div>
+      <div class="dom"><div class="lab">Dominance</div><div class="dombar" id="dombar"></div>
+        <div class="domleg" id="domleg"></div></div>
+    </div>
+    <div class="coins"><div class="h">Top by market cap</div><div id="coins"></div></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var $=function(i){return document.getElementById(i)}, last=0;
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function bn(n){if(n>=1e12)return "$"+(n/1e12).toFixed(2)+"T";if(n>=1e9)return "$"+(n/1e9).toFixed(1)+"B";if(n>=1e6)return "$"+(n/1e6).toFixed(1)+"M";return "$"+Math.round(n)}
+  function pr(n){if(n>=1000)return "$"+n.toLocaleString(undefined,{maximumFractionDigits:0});if(n>=1)return "$"+n.toFixed(2);return "$"+n.toFixed(n<0.01?5:4)}
+  function render(g,coins){
+    $("cap").textContent=bn(g.total_market_cap.usd);
+    var ch=g.market_cap_change_percentage_24h_usd||0,up=ch>=0;
+    $("chg").textContent=(up?"▲ ":"▼ ")+Math.abs(ch).toFixed(2)+"% (24h)";$("chg").className="chg "+(up?"up":"down");
+    $("sub").textContent="Vol "+bn(g.total_volume.usd)+" · "+g.active_cryptocurrencies.toLocaleString()+" coins";
+    var btc=g.market_cap_percentage.btc||0,eth=g.market_cap_percentage.eth||0,other=Math.max(0,100-btc-eth);
+    $("dombar").innerHTML='<span style="width:'+btc+'%;background:#f7931a"></span><span style="width:'+eth+'%;background:#8a92b2"></span><span style="width:'+other+'%;background:#2a3350"></span>';
+    $("domleg").innerHTML='<span class="i"><span class="dot" style="background:#f7931a"></span>BTC <b>'+btc.toFixed(1)+'%</b></span>'
+      +'<span class="i"><span class="dot" style="background:#8a92b2"></span>ETH <b>'+eth.toFixed(1)+'%</b></span>'
+      +'<span class="i"><span class="dot" style="background:#2a3350"></span>Other <b>'+other.toFixed(1)+'%</b></span>';
+    $("coins").innerHTML=coins.slice(0,7).map(function(c,i){var ch=c.price_change_percentage_24h||0,up=ch>=0;
+      return '<div class="coin"><div class="rk">'+(i+1)+'</div><div class="nm">'+esc(c.name)+'<span class="sym">'+esc(c.symbol)+'</span></div>'
+        +'<div class="pr">'+pr(c.current_price)+'</div><div class="ch '+(up?"up":"down")+'">'+(up?"+":"")+ch.toFixed(1)+'%</div></div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var r1=await xemd.proxy.fetch("https://api.coingecko.com/api/v3/global",{headers:{Accept:"application/json"}});
+      if(!r1.ok)throw new Error("HTTP "+r1.status);var g=(await r1.json()).data;
+      var r2=await xemd.proxy.fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=8&page=1",{headers:{Accept:"application/json"}});
+      var coins=r2.ok?await r2.json():[];
+      render(g,coins);
+      $("status").className="";$("status").textContent="CoinGecko · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="coingecko: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="market data unavailable"}
+  }
+  (async function(){xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,300000)})();
+</script></body></html>

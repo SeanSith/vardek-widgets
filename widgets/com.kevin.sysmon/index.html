@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>System Monitor</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--cpu:#7aa2f7;--mem:#bb9af7;--rx:#9ece6a;--tx:#e0af68;--hot:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;padding:22px 28px;gap:28px}
+  .col{display:flex;flex-direction:column;justify-content:center;gap:18px;min-width:0}
+  .left{flex:0 0 52%;border-right:1px solid var(--border);padding-right:28px}
+  .right{flex:1}
+  .metric .top{display:flex;align-items:baseline;gap:10px}
+  .metric .lbl{font-size:.95rem;color:var(--mid);font-weight:600}
+  .metric .val{margin-left:auto;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:1.9rem}
+  .metric .sub{font-family:var(--mono);font-size:.8rem;color:var(--dim)}
+  .bar{height:12px;border-radius:6px;background:var(--surface);border:1px solid var(--border);overflow:hidden;margin-top:7px;display:flex}
+  .bar>span{height:100%;transition:width .4s}
+  .bar .u{background:var(--cpu)}.bar .s{background:#3b5bbf}
+  .load{display:flex;gap:10px;margin-top:2px}
+  .load .l{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 10px;text-align:center}
+  .load .l .n{font-family:var(--mono);font-weight:700;font-size:1.3rem}.load .l .t{font-size:.7rem;color:var(--dim)}
+  .net{display:flex;gap:20px}
+  .net .n{flex:1}
+  .net .n .h{display:flex;align-items:center;gap:6px;color:var(--mid);font-size:.85rem}
+  .net .n .r{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:1.7rem}
+  .net canvas{width:100%;height:34px;display:block;margin-top:4px}
+  .procs .h{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+  .proc{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .proc .nm{font-family:var(--mono);font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+  .proc .pb{flex:0 0 90px;height:6px;background:var(--surface);border-radius:3px;overflow:hidden}
+  .proc .pb>span{display:block;height:100%;background:var(--cpu)}
+  .proc .pc{font-family:var(--mono);font-size:.9rem;font-weight:700;width:3.6em;text-align:right}
+  .foot{display:flex;gap:16px;color:var(--dim);font-family:var(--mono);font-size:.78rem}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim);text-align:center;padding:30px}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">Waiting for sysmond…<br><span style="font-size:.8rem;opacity:.7">load its LaunchAgent</span></div>
+  <div id="wrap" style="display:none">
+    <div class="col left">
+      <div class="metric"><div class="top"><span class="lbl">CPU</span><span class="sub" id="cpusub"></span><span class="val" id="cpuval" style="color:var(--cpu)">—</span></div><div class="bar"><span class="u" id="cpuu"></span><span class="s" id="cpus"></span></div></div>
+      <div class="metric"><div class="top"><span class="lbl">Memory</span><span class="sub" id="memsub"></span><span class="val" id="memval" style="color:var(--mem)">—</span></div><div class="bar"><span style="background:var(--mem)" id="membar"></span></div></div>
+      <div class="metric"><div class="top"><span class="lbl">Load average</span><span class="sub" id="loadsub"></span></div>
+        <div class="load"><div class="l"><div class="n" id="l1">—</div><div class="t">1 min</div></div><div class="l"><div class="n" id="l5">—</div><div class="t">5 min</div></div><div class="l"><div class="n" id="l15">—</div><div class="t">15 min</div></div></div></div>
+    </div>
+    <div class="col right">
+      <div class="net">
+        <div class="n"><div class="h">⬇ Download</div><div class="r" style="color:var(--rx)" id="rx">—</div><canvas id="rxc"></canvas></div>
+        <div class="n"><div class="h">⬆ Upload</div><div class="r" style="color:var(--tx)" id="tx">—</div><canvas id="txc"></canvas></div>
+      </div>
+      <div class="procs"><div class="h">Top processes</div><div id="procs"></div></div>
+      <div class="foot"><span id="uptime"></span><span id="cores"></span></div>
+    </div>
+  </div>
+<script>
+(function(){
+  "use strict";
+  var settings={netScaleKBs:2000};var $=function(i){return document.getElementById(i)};
+  var rxH=[],txH=[];
+  function fmtRate(k){if(k==null)return"—";if(k>=1024)return (k/1024).toFixed(1)+" MB/s";return Math.round(k)+" KB/s"}
+  function fmtUp(s){if(s==null)return"";var d=Math.floor(s/86400);s%=86400;var h=Math.floor(s/3600),m=Math.floor((s%3600)/60);
+    return "up "+(d?d+"d ":"")+h+"h "+m+"m"}
+  function spark(cv,hist,col){
+    var ctx=cv.getContext("2d"),dpr=Math.min(window.devicePixelRatio||1,2);
+    var W=Math.round(cv.clientWidth*dpr),H=Math.round(cv.clientHeight*dpr);if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
+    ctx.clearRect(0,0,W,H);if(hist.length<2)return;
+    var scale=Math.max(50,Number(settings.netScaleKBs)||2000),n=hist.length,pad=2*dpr;
+    var x=function(i){return i/(n-1)*W},y=function(v){return H-pad-Math.min(1,v/scale)*(H-2*pad)};
+    ctx.beginPath();ctx.moveTo(0,H);for(var i=0;i<n;i++)ctx.lineTo(x(i),y(hist[i]));ctx.lineTo(W,H);ctx.closePath();
+    ctx.fillStyle=col+"22";ctx.fill();
+    ctx.beginPath();for(var j=0;j<n;j++){var px=x(j),py=y(hist[j]);j?ctx.lineTo(px,py):ctx.moveTo(px,py)}
+    ctx.strokeStyle=col;ctx.lineWidth=1.6*dpr;ctx.lineJoin="round";ctx.stroke();
+  }
+  function render(d){
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+    if(d.cpu){$("cpuval").textContent=Math.round(d.cpu.used)+"%";
+      $("cpuu").style.width=d.cpu.user+"%";$("cpus").style.width=d.cpu.sys+"%";
+      $("cpusub").textContent=Math.round(d.cpu.user)+"% user · "+Math.round(d.cpu.sys)+"% sys";
+      $("cpuval").style.color=d.cpu.used>85?"#f7768e":"var(--cpu)";}
+    if(d.mem){$("memval").textContent=(d.mem.usedPct==null?"—":d.mem.usedPct+"%");
+      $("membar").style.width=(d.mem.usedPct||0)+"%";
+      $("memsub").textContent=(d.mem.usedGB!=null?d.mem.usedGB+" / "+d.mem.totalGB+" GB":d.mem.totalGB+" GB");}
+    if(d.load){$("l1").textContent=d.load[0].toFixed(2);$("l5").textContent=d.load[1].toFixed(2);$("l15").textContent=d.load[2].toFixed(2);
+      $("loadsub").textContent=d.cores?("/ "+d.cores+" cores"):"";
+      [["l1",0],["l5",1],["l15",2]].forEach(function(p){var el=$(p[0]);el.style.color=d.cores&&d.load[p[1]]>d.cores?"#f7768e":"var(--text)"});}
+    $("rx").textContent=fmtRate(d.net&&d.net.rxKBs);$("tx").textContent=fmtRate(d.net&&d.net.txKBs);
+    if(d.net&&d.net.rxKBs!=null){rxH.push(d.net.rxKBs);txH.push(d.net.txKBs);if(rxH.length>60){rxH.shift();txH.shift()}}
+    spark($("rxc"),rxH,"#9ece6a");spark($("txc"),txH,"#e0af68");
+    var procs=d.top||[];$("procs").innerHTML=procs.map(function(p){var w=Math.min(100,p.cpu/(d.cores?d.cores*100:100)*100);
+      return '<div class="proc"><span class="nm">'+String(p.name).replace(/[<>&]/g,"")+'</span><span class="pb"><span style="width:'+w+'%"></span></span><span class="pc">'+p.cpu.toFixed(0)+'%</span></div>'}).join("");
+    $("uptime").textContent=fmtUp(d.uptime);$("cores").textContent=(d.cores||"")+" cores";
+  }
+  function load(){var s=document.createElement("script");s.src="data.js?v="+Date.now();
+    s.onload=function(){s.remove();if(window.__SYS__)render(window.__SYS__)};
+    s.onerror=function(){s.remove();if($("wrap").style.display==="none")$("boot").textContent="sysmond not running — see README"};
+    document.head.appendChild(s)}
+  if(window.Vardek&&Vardek.settings)settings=Object.assign(settings,Vardek.settings);
+  if(window.Vardek&&Vardek.onSettingsChange)Vardek.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s)});
+  if(window.Vardek&&Vardek.onRefresh)Vardek.onRefresh(load);
+  load();setInterval(load,3000);
+})();
+</script></body></html>

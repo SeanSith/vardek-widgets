@@ -1,0 +1,72 @@
+{
+  "id": "com.kevin.lifezoo",
+  "name": "Life Zoo",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 0,
+  "permissions": {
+    "proxy": [],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    },
+    {
+      "cols": 6,
+      "rows": 1
+    },
+    {
+      "cols": 4,
+      "rows": 1
+    },
+    {
+      "cols": 3,
+      "rows": 1
+    },
+    {
+      "cols": 2,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "palette": {
+      "type": "enum",
+      "label": "Palette",
+      "values": [
+        "green",
+        "amber",
+        "cyan",
+        "magma"
+      ],
+      "default": "green"
+    },
+    "cell": {
+      "type": "number",
+      "label": "Cell size (px)",
+      "default": 9
+    }
+  }
+}

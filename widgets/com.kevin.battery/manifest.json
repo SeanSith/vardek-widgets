@@ -1,0 +1,31 @@
+{
+  "id": "com.kevin.battery",
+  "name": "Battery",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 20,
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {}
+}

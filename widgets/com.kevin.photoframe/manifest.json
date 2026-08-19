@@ -1,0 +1,60 @@
+{
+  "id": "com.kevin.photoframe",
+  "name": "Photo Frame",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 60,
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    },
+    {
+      "cols": 4,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "intervalSec": {
+      "type": "number",
+      "label": "Seconds per photo",
+      "default": 8
+    },
+    "kenBurns": {
+      "type": "boolean",
+      "label": "Ken Burns pan/zoom",
+      "default": true
+    },
+    "showCaption": {
+      "type": "boolean",
+      "label": "Show filename/date",
+      "default": false
+    },
+    "shuffle": {
+      "type": "boolean",
+      "label": "Shuffle order",
+      "default": true
+    }
+  }
+}

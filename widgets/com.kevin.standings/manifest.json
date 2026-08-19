@@ -1,0 +1,50 @@
+{
+  "id": "com.kevin.standings",
+  "name": "Standings",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 1800,
+  "permissions": {
+    "proxy": [
+      "https://site.api.espn.com/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "league": {
+      "type": "enum",
+      "label": "League",
+      "values": [
+        "nba",
+        "wnba",
+        "mlb",
+        "nfl",
+        "nhl"
+      ],
+      "default": "nba"
+    }
+  }
+}

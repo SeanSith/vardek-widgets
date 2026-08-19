@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Trending on Wikipedia</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#7dcfff;--up:#9ece6a;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:20px 30px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+  .head h1{font-size:1.3rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sp{flex:1}.head .sub{font-family:var(--mono);font-size:.8rem;color:var(--dim)}
+  #list{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:4px}
+  .row{display:grid;grid-template-columns:1.8em 1fr auto;gap:16px;align-items:center;padding:8px 4px}
+  .row+.row{border-top:1px solid rgba(42,51,80,.5)}
+  .row .rk{font-family:var(--mono);font-weight:700;font-size:1.2rem;color:var(--dim);text-align:center}
+  .row.top .rk{color:var(--accent)}
+  .row .m{min-width:0}
+  .row .t{font-size:1.2rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .x{font-size:.85rem;color:var(--mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .row .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:1.1rem;color:var(--up);text-align:right}
+  .row .v small{display:block;color:var(--dim);font-weight:400;font-size:.68rem}
+  #status{position:fixed;left:30px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">📈</span>Trending on Wikipedia</h1><span class="sp"></span><span class="sub" id="sub"></span></div>
+    <div id="list"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var $=function(i){return document.getElementById(i)}, last=0;
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function views(v){if(v>=1e6)return (v/1e6).toFixed(1)+"M";if(v>=1e3)return Math.round(v/1e3)+"K";return v}
+  function skip(t){return /^(Main Page|Special:|Wikipedia:|Portal:)/.test(t)}
+  function render(mr){
+    $("sub").textContent=mr.date?("reads on "+new Date(mr.date).toLocaleDateString([],{weekday:"long",month:"short",day:"numeric"})):"";
+    var arts=(mr.articles||[]).filter(function(a){return !skip(a.normalizedtitle||a.title)}).slice(0,8);
+    $("list").innerHTML=arts.map(function(a,i){
+      return '<div class="row'+(i<3?" top":"")+'"><div class="rk">'+(i+1)+'</div>'
+        +'<div class="m"><div class="t">'+esc(a.normalizedtitle||a.title)+'</div><div class="x">'+esc((a.extract||"").replace(/\n/g," "))+'</div></div>'
+        +'<div class="v">'+views(a.views)+'<small>views</small></div></div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  function ymd(d){return d.getUTCFullYear()+"/"+String(d.getUTCMonth()+1).padStart(2,"0")+"/"+String(d.getUTCDate()).padStart(2,"0")}
+  async function load(){
+    if(Date.now()-last<60000)return; last=Date.now();
+    try{
+      var res=await xemd.proxy.fetch("https://en.wikipedia.org/api/rest_v1/feed/featured/"+ymd(new Date()),{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();if(!d.mostread)throw new Error("no trending data yet");
+      render(d.mostread);
+      $("status").className="";$("status").textContent="Wikipedia · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="wikipedia: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="trending unavailable"}
+  }
+  (async function(){xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,3600000)})();
+</script></body></html>

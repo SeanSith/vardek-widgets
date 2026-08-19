@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Weather Alerts</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--extreme:#e0304a;--severe:#f7768e;--moderate:#ff9e64;--minor:#e0af68;--ok:#9ece6a;--unknown:#8089a6}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:22px 28px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+  .head h1{font-size:1.25rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sub{color:var(--mid);font-size:.95rem}.head .sp{flex:1}
+  .head .cnt{font-family:var(--mono);font-size:.9rem;color:var(--dim)}
+  #list{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+  .a{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--border);border-left-width:5px;border-radius:10px;padding:11px 15px}
+  .a .sev{font-family:var(--mono);font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em;writing-mode:horizontal-tb;text-align:center;min-width:5.5em}
+  .a .m{min-width:0}
+  .a .ev{font-size:1.15rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .a .ar{font-size:.85rem;color:var(--mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .a .exp{font-family:var(--mono);font-size:.8rem;color:var(--dim);text-align:right;white-space:nowrap}
+  .none{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--ok)}
+  .none .big{font-size:2rem;font-weight:700}.none .ic{font-size:3.4rem}
+  #status{position:fixed;left:28px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--severe)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">⚠️</span>Weather Alerts</h1><span class="sub" id="sub"></span><span class="sp"></span><span class="cnt" id="cnt"></span></div>
+    <div id="list"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={area:"CA",point:""};
+  var $=function(i){return document.getElementById(i)}, last=0;
+  var SEV={Extreme:"extreme",Severe:"severe",Moderate:"moderate",Minor:"minor",Unknown:"unknown"};
+  var SEVCOL={extreme:"#e0304a",severe:"#f7768e",moderate:"#ff9e64",minor:"#e0af68",unknown:"#8089a6"};
+  var SEVRANK={Extreme:0,Severe:1,Moderate:2,Minor:3,Unknown:4};
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function expStr(iso){if(!iso)return"";var d=new Date(iso),ms=d-Date.now();if(ms<0)return"expired";
+    var h=Math.floor(ms/3600000);if(h<24)return"until "+d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+    return"until "+d.toLocaleDateString([],{weekday:"short",hour:"numeric"})}
+  function render(feats){
+    var area=(settings.point?"point":(settings.area||"").toUpperCase());
+    $("sub").textContent=settings.point?settings.point:(settings.area||"").toUpperCase();
+    var list=$("list");
+    if(!feats.length){$("cnt").textContent="all clear";
+      list.innerHTML='<div class="none"><div class="ic">✓</div><div class="big">No active alerts</div><div style="color:var(--mid)">Conditions are quiet right now.</div></div>';
+      $("boot").classList.add("hidden");$("wrap").style.display="flex";return;
+    }
+    var alerts=feats.map(function(f){return f.properties}).sort(function(a,b){return (SEVRANK[a.severity]||9)-(SEVRANK[b.severity]||9)});
+    $("cnt").textContent=alerts.length+" active";
+    list.innerHTML=alerts.slice(0,7).map(function(p){
+      var sev=SEV[p.severity]||"unknown",col=SEVCOL[sev];
+      return '<div class="a" style="border-left-color:'+col+'"><div class="sev" style="color:'+col+'">'+esc(p.severity||"—")+'</div>'
+        +'<div class="m"><div class="ev">'+esc(p.event||"Alert")+'</div><div class="ar">'+esc(p.areaDesc||"")+'</div></div>'
+        +'<div class="exp">'+expStr(p.expires)+'</div></div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var url;
+      if(settings.point&&settings.point.trim())url="https://api.weather.gov/alerts/active?point="+encodeURIComponent(settings.point.trim());
+      else url="https://api.weather.gov/alerts/active?area="+encodeURIComponent((settings.area||"CA").trim().toUpperCase());
+      var res=await xemd.proxy.fetch(url,{headers:{Accept:"application/geo+json","User-Agent":"vardek-weather-alerts (dashboard)"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();render(d.features||[]);
+      $("status").className="";$("status").textContent="NWS · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="nws alerts: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="alerts unavailable"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,300000);
+  })();
+</script></body></html>

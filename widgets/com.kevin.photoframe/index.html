@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Photo Frame</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
+  #stage{position:absolute;inset:0;overflow:hidden}
+  .layer{position:absolute;inset:0;opacity:0;transition:opacity 1.4s ease}
+  .layer.show{opacity:1}
+  .layer img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;will-change:transform}
+  .layer.kb img{transition:transform var(--dur,8s) linear}
+  #cap{position:absolute;left:0;right:0;bottom:0;padding:26px 30px 22px;background:linear-gradient(transparent,rgba(0,0,0,.55));
+       color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.7);display:none}
+  body.cap #cap{display:block}
+  #cap .n{font-size:1.5rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #cap .d{font-family:ui-monospace,Menlo,monospace;font-size:.82rem;opacity:.85;margin-top:2px}
+  #boot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#556;font-size:1.05rem;text-align:center;padding:30px}
+  #boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="stage">
+    <div class="layer" id="A"></div>
+    <div class="layer" id="B"></div>
+  </div>
+  <div id="cap"><div class="n" id="capn"></div><div class="d" id="capd"></div></div>
+  <div id="boot">Waiting for photod…<br><span style="font-size:.82rem;opacity:.7">set a photo folder in photoframe.json</span></div>
+<script>
+(function(){
+  "use strict";
+  var settings={intervalSec:8,kenBurns:true,showCaption:false,shuffle:true};
+  var $=function(i){return document.getElementById(i)};
+  var frames=[],order=[],idx=-1,cur="A",timer=null,dataKey="";
+  function shuffle(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
+
+  function kb(imgEl){
+    // random Ken Burns: start/end scale+translate
+    var z1=1.0, z2=1.12+Math.random()*0.08;
+    var tx=(Math.random()*2-1)*3, ty=(Math.random()*2-1)*3;
+    imgEl.style.transition="none";imgEl.style.transform="scale("+z1+") translate(0,0)";
+    void imgEl.offsetWidth;
+    imgEl.style.transition="transform var(--dur) linear";
+    imgEl.style.transform="scale("+z2+") translate("+tx+"%,"+ty+"%)";
+  }
+  function advance(){
+    if(!order.length)return;
+    idx=(idx+1)%order.length;
+    var f=frames[order[idx]];
+    var next=cur==="A"?"B":"A";
+    var layer=$(next),img=layer.querySelector("img");if(!img){img=document.createElement("img");img.alt="";layer.appendChild(img);}
+    img.onload=function(){
+      $(cur).classList.remove("show");
+      layer.classList.add("show");
+      layer.classList.toggle("kb",settings.kenBurns!==false);
+      if(settings.kenBurns!==false)kb(img);
+      cur=next;
+      $("capn").textContent=f.name;$("capd").textContent=f.date||"";
+    };
+    img.src=f.file+"?v="+(f.file.length);
+    document.body.classList.toggle("cap",settings.showCaption===true);
+    document.documentElement.style.setProperty("--dur",((Number(settings.intervalSec)||8)+1.4)+"s");
+  }
+  function reschedule(){
+    if(timer)clearInterval(timer);
+    var ms=Math.max(3,Number(settings.intervalSec)||8)*1000;
+    timer=setInterval(advance,ms);
+  }
+  function apply(){
+    settings=Object.assign(settings,(window.Vardek&&Vardek.settings)||{});
+    reschedule();
+  }
+  function load(){
+    var s=document.createElement("script");s.src="data.js?v="+Date.now();
+    s.onload=function(){s.remove();var d=window.__PHOTOS__;if(!d)return;
+      var key=(d.frames||[]).map(function(f){return f.file}).join(",");
+      if(key!==dataKey){
+        dataKey=key;frames=d.frames||[];order=frames.map(function(_,i){return i});
+        if(settings.shuffle!==false)shuffle(order);idx=-1;
+        if(frames.length){$("boot").classList.add("hidden");advance();reschedule()}
+        else{$("boot").classList.remove("hidden");$("boot").innerHTML="No photos found in "+(d.folder||"the folder")+"<br><span style='font-size:.82rem;opacity:.7'>set a folder with images in photoframe.json</span>"}
+      }};
+    s.onerror=function(){s.remove();if(!frames.length)$("boot").textContent="photod not running — see README"};
+    document.head.appendChild(s);
+  }
+  document.addEventListener("vardek:ready",apply);
+  if(window.Vardek&&Vardek.onSettingsChange)Vardek.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);reschedule();document.body.classList.toggle("cap",settings.showCaption===true)});
+  if(window.Vardek&&Vardek.onRefresh)Vardek.onRefresh(load);
+  apply();load();setInterval(load,60000);
+})();
+</script></body></html>

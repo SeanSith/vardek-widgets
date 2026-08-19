@@ -1,0 +1,43 @@
+{
+  "id": "com.kevin.aqicities",
+  "name": "Air Quality Cities",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 1800,
+  "permissions": {
+    "proxy": [
+      "https://air-quality-api.open-meteo.com/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "cities": {
+      "type": "string",
+      "label": "Cities (Name,lat,lon; ...)",
+      "default": "San Francisco,37.77,-122.42;New York,40.71,-74.01;London,51.51,-0.13;Delhi,28.61,77.21;Beijing,39.90,116.40;Tokyo,35.68,139.69"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mondrian</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#f4f1e9}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={regenSec:12,palette:"classic"};
+  var PAL={classic:["#e63946","#1d3557","#f4d35e","#f4f1e9","#f4f1e9","#f4f1e9"],
+    cool:["#3a86ff","#8338ec","#06d6a0","#eef2f7","#eef2f7","#eef2f7"],
+    warm:["#e76f51","#f4a261","#e9c46a","#fdf6ec","#fdf6ec","#fdf6ec"],
+    neon:["#ff006e","#3a86ff","#ffbe0b","#0b0f1a","#0b0f1a","#141a2a"]};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d"),W,H,dpr,cells=[],target=[],anim=0,timer=0;
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;gen()}
+  function split(x,y,w,h,depth,out){
+    var minS=Math.min(W,H)*0.14;
+    if(depth<=0||((w<minS*1.6||h<minS*1.6)&&Math.random()<0.6)||(w<minS||h<minS)){out.push({x:x,y:y,w:w,h:h});return}
+    if((w>=h&&Math.random()<0.85)||h<minS*1.4){var sx=x+w*(0.3+Math.random()*0.4);split(x,y,sx-x,h,depth-1,out);split(sx,y,x+w-sx,h,depth-1,out);}
+    else{var sy=y+h*(0.3+Math.random()*0.4);split(x,y,w,sy-y,depth-1,out);split(x,sy,w,y+h-sy,depth-1,out);}
+  }
+  function gen(){
+    var out=[];split(0,0,W,H,5,out);var pal=PAL[settings.palette]||PAL.classic;
+    cells=out.map(function(c){var r=Math.random();var col=r<0.14?pal[0]:r<0.26?pal[1]:r<0.36?pal[2]:pal[3+Math.floor(Math.random()*3)];return {x:c.x,y:c.y,w:c.w,h:c.h,col:col}});
+  }
+  function draw(){
+    var pal=PAL[settings.palette]||PAL.classic,bg=pal[3];ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+    var bw=Math.max(4*dpr,Math.min(W,H)*0.012);
+    cells.forEach(function(c){ctx.fillStyle=c.col;ctx.fillRect(c.x,c.y,c.w,c.h);
+      ctx.strokeStyle=pal===PAL.neon?"#05070c":"#111";ctx.lineWidth=bw;ctx.strokeRect(c.x+bw/2,c.y+bw/2,c.w-bw,c.h-bw);});
+    // outer frame
+    ctx.strokeStyle=(settings.palette==="neon")?"#05070c":"#111";ctx.lineWidth=bw;ctx.strokeRect(bw/2,bw/2,W-bw,H-bw);
+  }
+  function frame(){
+    timer++;if(timer>=Math.max(4,Number(settings.regenSec)||12)*60){timer=0;gen()}
+    draw();requestAnimationFrame(frame);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);gen()});
+    xemd.ready();resize();requestAnimationFrame(frame);window.addEventListener("resize",resize);
+  })();
+</script></body></html>

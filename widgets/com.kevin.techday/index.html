@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tech History</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0a0d12;--surface:#141922;--border:#232c3a;--text:#e6ecf2;--mid:#8496a8;--dim:#556374;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#4ade80;--today:#fbbf24}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:30px 44px;justify-content:center}
+  .top{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:.85rem;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+  .badge{background:rgba(251,191,36,.15);color:var(--today);border-radius:20px;padding:3px 10px;font-weight:700;font-size:.72rem}
+  .inner{transition:opacity .5s}
+  .year{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:4.6rem;line-height:1;color:var(--accent);margin:8px 0 2px}
+  .date{font-family:var(--mono);font-size:1rem;color:var(--mid);margin-bottom:14px}
+  .event{font-size:1.9rem;line-height:1.35;max-width:46ch}
+  .dots{display:flex;gap:6px;margin-top:20px}.dots i{width:6px;height:6px;border-radius:50%;background:var(--border);transition:background .3s,width .3s}.dots i.on{background:var(--accent);width:18px;border-radius:3px}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">…</div>
+  <div id="wrap" style="display:none">
+    <div class="top"><span>⚙ On This Day in Tech</span><span class="badge" id="badge" style="display:none">TODAY</span></div>
+    <div class="inner" id="inner"><div class="year" id="year"></div><div class="date" id="date"></div><div class="event" id="event"></div></div>
+    <div class="dots" id="dots"></div>
+  </div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={rotateSec:10};
+  var $=function(i){return document.getElementById(i)}, idx=-1, list=[], timer=null;
+  // [month(1-12), day, year, event]
+  var E=[
+    [1,1,1983,"ARPANET switches to TCP/IP — the birth of the modern Internet."],
+    [1,3,1977,"Apple Computer is incorporated by Jobs, Wozniak, and Wayne."],
+    [1,9,2007,"Steve Jobs unveils the first iPhone at Macworld."],
+    [1,24,1984,"Apple introduces the Macintosh with the '1984' Super Bowl ad."],
+    [2,4,2004,"Mark Zuckerberg launches 'TheFacebook' from his Harvard dorm."],
+    [2,14,2005,"YouTube is registered as a domain."],
+    [2,16,1978,"The first computer bulletin board system (CBBS) goes online."],
+    [3,12,1989,"Tim Berners-Lee circulates his proposal for the World Wide Web."],
+    [3,15,1985,"Symbolics.com becomes the first registered .com domain."],
+    [3,21,2006,"Jack Dorsey posts the first tweet: 'just setting up my twttr'."],
+    [4,1,1976,"Apple is founded; the Apple I sells for $666.66."],
+    [4,4,1975,"Bill Gates and Paul Allen found Microsoft."],
+    [4,23,2005,"'Me at the zoo' becomes the first video uploaded to YouTube."],
+    [5,22,1990,"Microsoft ships Windows 3.0."],
+    [6,23,1912,"Alan Turing, father of computer science, is born."],
+    [6,29,2007,"The iPhone goes on sale to the public."],
+    [7,16,1945,"The first digital computers help usher in the atomic age."],
+    [7,20,1969,"The Apollo Guidance Computer lands humans on the Moon."],
+    [8,6,1991,"Tim Berners-Lee posts the first public website."],
+    [8,12,1981,"IBM releases the IBM PC (model 5150)."],
+    [8,24,1995,"Microsoft launches Windows 95 to midnight crowds."],
+    [8,25,1991,"Linus Torvalds announces Linux: 'just a hobby, won't be big'."],
+    [9,4,1998,"Larry Page and Sergey Brin incorporate Google."],
+    [9,9,1947,"Engineers log the first actual computer 'bug' — a moth in a relay."],
+    [9,12,1958,"Jack Kilby demonstrates the first working integrated circuit."],
+    [10,1,2003,"The first modern smartphone era dawns as data networks spread."],
+    [10,5,2011,"Steve Jobs dies at age 56."],
+    [10,23,2001,"Apple introduces the iPod: '1,000 songs in your pocket'."],
+    [10,29,1969,"The first ARPANET message is sent — the system crashed after 'lo'."],
+    [11,10,1983,"Bill Gates announces Windows at a New York press event."],
+    [11,20,1985,"Microsoft ships Windows 1.0."],
+    [11,30,2022,"OpenAI releases ChatGPT to the public."],
+    [12,9,1968,"Douglas Engelbart gives 'The Mother of All Demos' — mouse, hypertext, video."],
+    [12,16,1947,"The transistor is first demonstrated at Bell Labs."],
+    [12,23,1947,"Bell Labs announces the transistor — the seed of all modern electronics."],
+    [2,10,1996,"IBM's Deep Blue beats Garry Kasparov in a game of chess."],
+    [5,11,1997,"Deep Blue defeats world champion Kasparov in a full match."],
+    [6,4,1977,"The Apple II ships, helping launch the personal computer era."],
+    [7,15,2006,"Twitter launches to the public."],
+    [10,4,1957,"Sputnik 1 launches, sparking the space race and ARPA."],
+    [3,10,1876,"Alexander Graham Bell makes the first telephone call."]
+  ];
+  var MO=["","January","February","March","April","May","June","July","August","September","October","November","December"];
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function ord(d){var s=["th","st","nd","rd"],v=d%100;return d+(s[(v-20)%10]||s[v]||s[0])}
+  function build(){
+    var n=new Date(),m=n.getMonth()+1,d=n.getDate();
+    var today=E.filter(function(e){return e[0]===m&&e[1]===d});
+    list=today.length?today.map(function(e){return{e:e,today:true}}):E.slice().sort(function(a,b){return a[2]-b[2]}).map(function(e){return{e:e,today:false}});
+  }
+  function show(i){
+    if(!list.length)return;idx=(i+list.length)%list.length;var it=list[idx],e=it.e;
+    var inner=$("inner");inner.style.opacity="0";
+    setTimeout(function(){
+      $("year").textContent=e[2];$("date").textContent=MO[e[0]]+" "+ord(e[1]);$("event").textContent=e[3];
+      $("badge").style.display=it.today?"inline-block":"none";
+      var dots=$("dots").children;for(var k=0;k<dots.length;k++)dots[k].className=(k===idx%dots.length)?"on":"";
+      inner.style.opacity="1";
+    },260);
+  }
+  function schedule(){if(timer)clearInterval(timer);timer=setInterval(function(){show(idx+1)},Math.max(5,Number(settings.rotateSec)||10)*1000)}
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    build();$("dots").innerHTML=Array.from({length:Math.min(8,list.length)}).map(function(){return"<i></i>"}).join("");
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);schedule()});
+    xemd.ready();$("boot").classList.add("hidden");$("wrap").style.display="flex";show(0);schedule();
+    setInterval(build,3600000);
+  })();
+</script></body></html>

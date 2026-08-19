@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moon Phase</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --bg: #080a12; --text: #e6e9ef; --text-mid: #8089a6; --text-dim: #565f89; --accent: #cfd6e6;
+          --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; }
+  #root { position: relative; width: 100%; height: 100%; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #info { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: none; flex-direction: column; gap: 16px; padding-right: 34px; }
+  body.wide #info { display: flex; }
+  #info .phase { font-size: 2rem; font-weight: 700; letter-spacing: -0.01em; }
+  #info .il { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 1.15rem; color: var(--text-mid); }
+  .ev { display: flex; align-items: baseline; gap: 12px; }
+  .ev .k { font-size: .8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .08em; width: 92px; }
+  .ev .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 600; }
+  #caption { position: absolute; left: 0; right: 0; bottom: 8%; text-align: center; display: none; }
+  #caption .phase { font-size: 1.1rem; font-weight: 600; }
+  #caption .il { font-family: var(--mono); font-size: .9rem; color: var(--text-mid); margin-top: 2px; }
+  body.compact #caption { display: block; }
+</style>
+</head>
+<body>
+  <div id="root">
+    <canvas id="c"></canvas>
+    <div id="info">
+      <div><div class="phase" id="i-phase">—</div><div class="il" id="i-il"></div></div>
+      <div class="ev"><span class="k">Moon age</span><span class="v" id="i-age"></span></div>
+      <div class="ev"><span class="k">Next full</span><span class="v" id="i-full"></span></div>
+      <div class="ev"><span class="k">Next new</span><span class="v" id="i-new"></span></div>
+    </div>
+    <div id="caption"><div class="phase" id="c-phase"></div><div class="il" id="c-il"></div></div>
+  </div>
+<script>
+(function () {
+  "use strict";
+  var canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
+  var settings = { hemisphere: "north" };
+  var SYN = 29.530588853, KNOWN = Date.UTC(2000, 0, 6, 18, 14, 0);
+  var NAMES = ["New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous",
+               "Full Moon", "Waning Gibbous", "Last Quarter", "Waning Crescent"];
+  var W = 0, H = 0, dpr = 1;
+
+  function moonData(ms) {
+    var age = ((((ms - KNOWN) / 86400000) % SYN) + SYN) % SYN;
+    var p = age / SYN;
+    var illum = (1 - Math.cos(2 * Math.PI * p)) / 2;
+    var idx = Math.floor(p * 8 + 0.5) % 8;
+    var nextFull = KNOWN + (Math.ceil((ms - KNOWN) / 86400000 / SYN - 0.5) + 0.5) * SYN * 86400000;
+    var nextNew = KNOWN + Math.ceil((ms - KNOWN) / 86400000 / SYN) * SYN * 86400000;
+    return { p: p, age: age, illum: illum, name: NAMES[idx], waxing: p < 0.5,
+             nextFull: new Date(nextFull), nextNew: new Date(nextNew) };
+  }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var r = canvas.getBoundingClientRect();
+    W = Math.max(1, Math.round(r.width * dpr)); H = Math.max(1, Math.round(r.height * dpr));
+    if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+    layout();
+  }
+  var cx, cy, R, wide;
+  function layout() {
+    var cw = canvas.clientWidth, ch = canvas.clientHeight;
+    wide = cw / ch >= 1.7 && cw >= 520;
+    document.body.classList.toggle("wide", wide);
+    document.body.classList.toggle("compact", !wide && ch >= 150);
+    var compact = !wide && ch >= 150;
+    R = (wide ? ch * 0.42 : Math.min(cw, ch) * (compact ? 0.36 : 0.42)) * dpr;
+    if (wide) {
+      var panelW = 220, gap = R / dpr * 0.5, groupW = 2 * (R / dpr) + gap + panelW;
+      var left = Math.max(20, (cw - groupW) / 2);
+      cx = (left + R / dpr) * dpr;
+      document.getElementById("info").style.right = left + "px";
+    } else { cx = cw / 2 * dpr; }
+    cy = ch / 2 * dpr;
+    if (!wide && document.body.classList.contains("compact")) cy = ch * 0.40 * dpr;
+  }
+
+  function drawMoon(m) {
+    ctx.clearRect(0, 0, W, H);
+    // starfield
+    ctx.fillStyle = "#080a12"; ctx.fillRect(0, 0, W, H);
+    // faint stars (deterministic-ish by index)
+    ctx.fillStyle = "rgba(200,215,240,0.5)";
+    for (var i = 0; i < 60; i++) {
+      var sx = (Math.sin(i * 12.9898) * 43758.5453 % 1 + 1) % 1 * W;
+      var sy = (Math.sin(i * 78.233) * 12543.123 % 1 + 1) % 1 * H;
+      var sz = ((i % 3) + 1) * 0.4 * dpr;
+      ctx.globalAlpha = 0.25 + (i % 5) * 0.12; ctx.fillRect(sx, sy, sz, sz);
+    }
+    ctx.globalAlpha = 1;
+
+    // outer soft glow
+    var glow = ctx.createRadialGradient(cx, cy, R * 0.9, cx, cy, R * 1.5);
+    glow.addColorStop(0, "rgba(180,200,240,0.12)"); glow.addColorStop(1, "rgba(180,200,240,0)");
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, R * 1.5, 0, 7); ctx.fill();
+
+    var LIGHT = "#e9edf5", DARK = "#151a28";
+    // dark disc
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI); ctx.fillStyle = DARK; ctx.fill(); ctx.clip();
+    // lit lune: right semicircle + terminator ellipse (waxing lit on right in N hemisphere)
+    var t = Math.cos(2 * Math.PI * m.p);                // +1 new … −1 full
+    var waxRight = (settings.hemisphere === "south") ? !m.waxing : m.waxing;
+    ctx.beginPath();
+    if (waxRight) {
+      ctx.arc(cx, cy, R, -Math.PI / 2, Math.PI / 2, false);           // right half
+      ctx.ellipse(cx, cy, R * Math.abs(t), R, 0, Math.PI / 2, -Math.PI / 2, t > 0);
+    } else {
+      ctx.arc(cx, cy, R, Math.PI / 2, -Math.PI / 2, false);           // left half
+      ctx.ellipse(cx, cy, R * Math.abs(t), R, 0, -Math.PI / 2, Math.PI / 2, t <= 0);
+    }
+    ctx.fillStyle = LIGHT; ctx.fill();
+    // craters (only visible where lit — drawn over, clipped to disc)
+    var craters = [[-0.25, -0.3, 0.13], [0.28, 0.18, 0.16], [0.05, 0.42, 0.09], [-0.38, 0.28, 0.08],
+                   [0.34, -0.32, 0.07], [-0.12, 0.08, 0.10], [0.5, -0.05, 0.06]];
+    ctx.globalCompositeOperation = "source-atop";
+    craters.forEach(function (cr) {
+      var gx = cx + cr[0] * R, gy = cy + cr[1] * R, gr = cr[2] * R;
+      var rg = ctx.createRadialGradient(gx - gr * 0.3, gy - gr * 0.3, 0, gx, gy, gr);
+      rg.addColorStop(0, "rgba(120,132,158,0.0)"); rg.addColorStop(0.7, "rgba(120,132,158,0.28)"); rg.addColorStop(1, "rgba(90,100,124,0.12)");
+      ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(gx, gy, gr, 0, 7); ctx.fill();
+    });
+    ctx.globalCompositeOperation = "source-over";
+    ctx.restore();
+    // rim
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.strokeStyle = "rgba(150,165,200,0.25)"; ctx.lineWidth = 1 * dpr; ctx.stroke();
+  }
+
+  function fmtDate(d) { return d.toLocaleDateString([], { month: "short", day: "numeric" }); }
+  function daysUntil(d) { var dd = (d.getTime() - Date.now()) / 86400000; return dd < 1 ? "tomorrow" : Math.round(dd) + " days"; }
+
+  function update() {
+    var m = moonData(Date.now());
+    drawMoon(m);
+    var pct = Math.round(m.illum * 100);
+    document.getElementById("i-phase").textContent = m.name;
+    document.getElementById("i-il").textContent = pct + "% illuminated" + (m.waxing ? " · waxing" : " · waning");
+    document.getElementById("i-age").textContent = m.age.toFixed(1) + " days";
+    document.getElementById("i-full").textContent = fmtDate(m.nextFull) + " · " + daysUntil(m.nextFull);
+    document.getElementById("i-new").textContent = fmtDate(m.nextNew) + " · " + daysUntil(m.nextNew);
+    document.getElementById("c-phase").textContent = m.name;
+    document.getElementById("c-il").textContent = pct + "% · " + m.age.toFixed(1) + "d";
+  }
+
+  function apply() { settings = Object.assign(settings, (window.Vardek && Vardek.settings) || {}); layout(); update(); }
+  document.addEventListener("vardek:ready", apply);
+  if (window.Vardek && Vardek.onResize) Vardek.onResize(resize);
+  if (window.Vardek && Vardek.onSettingsChange) Vardek.onSettingsChange(function (s) { if (s) settings = Object.assign(settings, s); update(); });
+  window.addEventListener("resize", resize);
+  apply(); resize(); update();
+  setInterval(update, 60000);
+})();
+</script>
+</body>
+</html>

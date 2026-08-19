@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mandelbrot</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#000}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={palette:"fire"};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d");
+  var off=document.createElement("canvas"),octx=off.getContext("2d"),img;
+  var W,H,dpr,fw,fh,cx=-0.75,cy=0,span=3.2,zoomDir=-1,target=0,hueShift=0;
+  var TARGETS=[[-0.743643887,0.131825904],[-0.10109636,0.95628660],[-1.2505,0.0201],[0.001643,0.822467],[-0.77568,0.13646],[0.28693,0.01417]];
+  var PAL={fire:function(t){return hsl(20+t*40,90,10+t*55)},ice:function(t){return hsl(200-t*40,80,8+t*60)},
+    psychedelic:function(t){return hsl(t*360*3,90,55)},gold:function(t){return hsl(45+t*15,85,8+t*62)},mono:function(t){return hsl(210,10,t*95)}};
+  function hsl(h,s,l){h=((h%360)+360)%360;s/=100;l/=100;var c=(1-Math.abs(2*l-1))*s,x=c*(1-Math.abs((h/60)%2-1)),m=l-c/2,r,g,b;
+    if(h<60){r=c;g=x;b=0}else if(h<120){r=x;g=c;b=0}else if(h<180){r=0;g=c;b=x}else if(h<240){r=0;g=x;b=c}else if(h<300){r=x;g=0;b=c}else{r=c;g=0;b=x}
+    return [(r+m)*255,(g+m)*255,(b+m)*255]}
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;
+    fw=Math.min(240,Math.round(cv.clientWidth/6));fh=Math.round(fw*H/W);off.width=fw;off.height=fh;img=octx.createImageData(fw,fh)}
+  function draw(){
+    var pal=PAL[settings.palette]||PAL.fire,d=img.data,asp=fw/fh;
+    var maxIter=Math.round(80+Math.max(0,Math.log2(3.2/span))*22);
+    var xmin=cx-span/2,ymin=cy-span/(2*asp),dx=span/fw,dy=span/(asp*fh);
+    for(var py=0;py<fh;py++){var y0=ymin+py*dy;for(var px=0;px<fw;px++){var x0=xmin+px*dx;
+      var x=0,y=0,it=0,x2=0,y2=0;
+      while(x2+y2<=4&&it<maxIter){y=2*x*y+y0;x=x2-y2+x0;x2=x*x;y2=y*y;it++}
+      var o=(py*fw+px)*4;
+      if(it>=maxIter){d[o]=d[o+1]=d[o+2]=0;d[o+3]=255}
+      else{var sm=it+1-Math.log(Math.log(Math.sqrt(x2+y2)))/Math.log(2);var tt=(sm/maxIter);
+        var c=pal((tt*3+hueShift)%1);d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=255}}}
+    octx.putImageData(img,0,0);ctx.imageSmoothingEnabled=true;ctx.drawImage(off,0,0,fw,fh,0,0,W,H);
+  }
+  function frame(){
+    span*=0.985;hueShift=(hueShift+0.002)%1;
+    // ease center toward target
+    var tg=TARGETS[target];cx+=(tg[0]-cx)*0.03;cy+=(tg[1]-cy)*0.03;
+    if(span<0.00008){span=3.2;cx=-0.75;cy=0;target=(target+1)%TARGETS.length}
+    draw();requestAnimationFrame(frame);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s)});
+    xemd.ready();resize();target=Math.floor(Math.random()*TARGETS.length);requestAnimationFrame(frame);window.addEventListener("resize",resize);
+  })();
+</script></body></html>

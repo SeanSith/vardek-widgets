@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Galaxy</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#02030a}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={arms:4,speed:1};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d"),W,H,dpr,rot=0,stars=[],bg=[];
+  function rnd(a,b){return a+Math.random()*(b-a)}
+  function build(){
+    var maxR=Math.min(W,H)*0.46, N=Math.round(W*H/650), arms=Math.max(1,Math.round(Number(settings.arms)||4));
+    stars=[];
+    for(var i=0;i<N;i++){
+      var r=maxR*Math.pow(Math.random(),0.7);
+      var arm=Math.floor(Math.random()*arms);
+      var twist=r/maxR*4.2;
+      var scatter=(Math.random()-0.5)*(0.28+(1-r/maxR)*0.45);
+      var ang=arm*(Math.PI*2/arms)+twist+scatter;
+      var f=r/maxR;
+      // color: warm core -> blue-white arms
+      var col;
+      if(f<0.18)col="rgba(255,"+Math.round(228-f*200)+","+Math.round(170-f*300)+",";
+      else if(Math.random()<0.12)col="rgba(120,180,255,";
+      else col="rgba("+Math.round(210-f*40)+","+Math.round(220-f*20)+",255,";
+      stars.push({r:r,a:ang,col:col,sz:rnd(0.7,2.2)*(1-f*0.3),tw:Math.random()*6.28,al:rnd(0.55,1)});
+    }
+    // faint background stars
+    bg=[];for(var b=0;b<Math.round(W*H/9000);b++)bg.push([Math.random()*W,Math.random()*H,Math.random()*1.2+0.3,rnd(0.15,0.6)]);
+  }
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;build()}
+  function frame(){
+    ctx.fillStyle="#02030a";ctx.fillRect(0,0,W,H);
+    var cx=W/2,cy=H/2;
+    // bg stars
+    ctx.globalCompositeOperation="lighter";
+    for(var b=0;b<bg.length;b++){var s=bg[b];ctx.fillStyle="rgba(200,215,255,"+s[3]+")";ctx.beginPath();ctx.arc(s[0],s[1],s[2]*dpr,0,7);ctx.fill()}
+    // core glow
+    var g=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.min(W,H)*0.12);
+    g.addColorStop(0,"rgba(255,240,200,0.5)");g.addColorStop(0.4,"rgba(255,200,120,0.18)");g.addColorStop(1,"rgba(255,180,80,0)");
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,Math.min(W,H)*0.12,0,7);ctx.fill();
+    var flat=0.62;
+    for(var i=0;i<stars.length;i++){var st=stars[i];
+      var a=st.a+rot*(0.4+0.6*(1-st.r/(Math.min(W,H)*0.46)));
+      var x=cx+Math.cos(a)*st.r, y=cy+Math.sin(a)*st.r*flat;
+      var tw=0.6+0.4*Math.sin(rot*3+st.tw);
+      ctx.fillStyle=st.col+(st.al*tw)+")";
+      ctx.beginPath();ctx.arc(x,y,st.sz*dpr,0,7);ctx.fill();
+    }
+    ctx.globalCompositeOperation="source-over";
+    rot+=0.0016*(Number(settings.speed)||1);requestAnimationFrame(frame);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);build()});
+    xemd.ready();resize();requestAnimationFrame(frame);window.addEventListener("resize",resize);
+  })();
+</script></body></html>

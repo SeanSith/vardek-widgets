@@ -1,0 +1,59 @@
+{
+  "id": "com.kevin.cocktail",
+  "name": "Cocktail",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 60,
+  "permissions": {
+    "proxy": [],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    },
+    {
+      "cols": 4,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "rotateSec": {
+      "type": "number",
+      "label": "Seconds per drink",
+      "default": 16
+    },
+    "alcoholic": {
+      "type": "enum",
+      "label": "Show",
+      "values": [
+        "any",
+        "alcoholic",
+        "non"
+      ],
+      "default": "any"
+    }
+  }
+}

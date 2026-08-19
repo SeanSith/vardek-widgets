@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Formula 1</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0c0a0d;--surface:#1a161c;--border:#332830;--text:#f2eaf0;--mid:#b39daf;--dim:#7a6a76;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--f1:#e10600;--gold:#e0c07a}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;padding:24px 30px;gap:30px}
+  .hero{flex:0 0 46%;min-width:0;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--border);padding-right:28px}
+  .hero .rd{font-family:var(--mono);font-size:.85rem;color:var(--f1);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+  .hero .race{font-size:2.1rem;font-weight:800;line-height:1.08;margin:4px 0 4px}
+  .hero .circ{font-size:1.05rem;color:var(--mid)}
+  .hero .cd{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:3.4rem;line-height:1;margin:14px 0 2px}
+  .hero .dt{font-family:var(--mono);font-size:.95rem;color:var(--dim)}
+  .stand{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+  .stand .h{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+  .drv{display:grid;grid-template-columns:1.8em 1fr auto;gap:12px;align-items:center;padding:6px 0}
+  .drv+.drv{border-top:1px solid rgba(51,40,48,.6)}
+  .drv .pos{font-family:var(--mono);font-weight:700;font-size:1.1rem;color:var(--mid);text-align:center}
+  .drv.p1 .pos{color:var(--gold)}
+  .drv .nm{min-width:0}.drv .nm .n{font-size:1.1rem;font-weight:600}.drv .nm .c{font-size:.8rem;color:var(--dim)}
+  .drv .pts{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:1.2rem}
+  #status{position:fixed;left:30px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--f1)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="hero"><div class="rd" id="round"></div><div class="race" id="race"></div><div class="circ" id="circ"></div>
+      <div class="cd" id="cd">—</div><div class="dt" id="dt"></div></div>
+    <div class="stand"><div class="h">Driver standings</div><div id="drivers"></div></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var $=function(i){return document.getElementById(i)}, last=0, raceT=null, tick=null;
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function cd(ms){if(ms<=0)return"Underway / done";var s=Math.floor(ms/1000),d=Math.floor(s/86400);s%=86400;var h=Math.floor(s/3600);s%=3600;var m=Math.floor(s/60);
+    return (d>0?d+"d ":"")+String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+String(s%60).padStart(2,"0")}
+  function renderRace(r){
+    $("round").textContent="Round "+r.round+" · Next Grand Prix";
+    $("race").textContent=r.raceName;
+    var loc=r.Circuit&&r.Circuit.Location;
+    $("circ").textContent=(r.Circuit&&r.Circuit.circuitName||"")+(loc?" · "+loc.locality+", "+loc.country:"");
+    raceT=new Date(r.date+"T"+(r.time||"12:00:00Z"));
+    $("dt").textContent=raceT.toLocaleString([],{weekday:"short",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+    if(tick)clearInterval(tick);function upd(){$("cd").textContent=cd(raceT-Date.now())}upd();tick=setInterval(upd,1000);
+  }
+  function renderDrivers(ds){
+    $("drivers").innerHTML=ds.slice(0,7).map(function(x){
+      var d=x.Driver,con=(x.Constructors&&x.Constructors[0]&&x.Constructors[0].name)||"";
+      return '<div class="drv'+(x.position==="1"?" p1":"")+'"><div class="pos">'+x.position+'</div>'
+        +'<div class="nm"><div class="n">'+esc(d.givenName+" "+d.familyName)+'</div><div class="c">'+esc(con)+'</div></div>'
+        +'<div class="pts">'+x.points+'</div></div>';
+    }).join("");
+  }
+  async function load(){
+    if(Date.now()-last<60000)return; last=Date.now();
+    try{
+      var r1=await xemd.proxy.fetch("https://api.jolpi.ca/ergast/f1/current/next.json",{headers:{Accept:"application/json"}});
+      if(!r1.ok)throw new Error("HTTP "+r1.status);
+      var d1=await r1.json();var races=d1.MRData.RaceTable.Races;
+      if(races&&races.length)renderRace(races[0]);else{$("round").textContent="Season complete";$("race").textContent="No upcoming races";$("cd").textContent="";}
+      var r2=await xemd.proxy.fetch("https://api.jolpi.ca/ergast/f1/current/driverStandings.json",{headers:{Accept:"application/json"}});
+      if(r2.ok){var d2=await r2.json();var sl=d2.MRData.StandingsTable.StandingsLists;if(sl&&sl.length)renderDrivers(sl[0].DriverStandings);}
+      $("boot").classList.add("hidden");$("wrap").style.display="flex";
+      $("status").className="";$("status").textContent="Ergast/Jolpica · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="f1 api: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="F1 data unavailable"}
+  }
+  (async function(){xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,3600000)})();
+</script></body></html>

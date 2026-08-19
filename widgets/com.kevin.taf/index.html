@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>TAF Forecast</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#081018;--surface:#12202e;--border:#1e3548;--text:#e6f0f5;--mid:#7fa0b3;--dim:#4d6b7d;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#4cc9f0;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:20px 28px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+  .head h1{font-size:1.35rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sp{flex:1}.head .iss{font-family:var(--mono);font-size:.78rem;color:var(--dim)}
+  .raw{font-family:var(--mono);font-size:.82rem;color:var(--mid);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:11px 14px;line-height:1.5;margin-bottom:12px;white-space:pre-wrap;word-break:break-word}
+  .raw b{color:var(--accent)}
+  #periods{flex:1;min-height:0;display:flex;flex-direction:column;gap:6px;overflow:hidden}
+  .per{display:grid;grid-template-columns:8.5em 1fr;gap:14px;align-items:baseline;padding:7px 2px}
+  .per+.per{border-top:1px solid rgba(30,53,72,.6)}
+  .per .when{font-family:var(--mono);font-size:.9rem;color:var(--accent);font-weight:700}
+  .per .when .ch{color:var(--dim);font-weight:400}
+  .per .desc{font-size:1.02rem;display:flex;flex-wrap:wrap;gap:5px 14px}
+  .per .desc .k{color:var(--mid)}
+  #status{position:fixed;left:28px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">🛫</span><span id="apt">TAF</span></h1><span class="sp"></span><span class="iss" id="iss"></span></div>
+    <div class="raw" id="raw"></div>
+    <div id="periods"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={airport:"KSFO"};
+  var $=function(i){return document.getElementById(i)}, last=0;
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function hm(ep){return ep?new Date(ep*1000).toLocaleString([],{weekday:"short",hour:"2-digit",minute:"2-digit"}):""}
+  function wind(f){if(f.wdir==null&&f.wspd==null)return"";var dir=(f.wdir==="VRB"||f.wdir===0)?"VRB":(f.wdir+"°");
+    return dir+"@"+(f.wspd||0)+(f.wgst?"G"+f.wgst:"")+"kt"}
+  function vis(f){if(f.visib==null)return"";return (f.visib==="6+"?"6+ mi":f.visib+" mi")}
+  function clouds(f){if(!f.clouds||!f.clouds.length)return"";return f.clouds.map(function(c){return c.cover+(c.base?" "+c.base+"ft":"")}).join(", ")}
+  function chg(f){var c=f.fcstChange;if(!c)return"From";return c}
+  function render(t){
+    $("apt").textContent=t.icaoId+" Forecast";
+    $("iss").textContent="issued "+hm(t.issueTime? Math.floor(new Date(t.issueTime).getTime()/1000):null);
+    // highlight raw: bold the ICAO and FM groups
+    var raw=esc(t.rawTAF||"").replace(/\b(FM\d{6}|BECMG|TEMPO|PROB\d0)\b/g,'<b>$1</b>');
+    $("raw").innerHTML=raw;
+    var fc=t.fcsts||[];
+    $("periods").innerHTML=fc.slice(0,7).map(function(f){
+      var parts=[];var w=wind(f);if(w)parts.push('<span><span class="k"></span>'+w+'</span>');
+      var v=vis(f);if(v)parts.push('<span>'+v+'</span>');
+      if(f.wxString)parts.push('<span style="color:#e0af68">'+esc(f.wxString)+'</span>');
+      var cl=clouds(f);if(cl)parts.push('<span>'+esc(cl)+'</span>');
+      return '<div class="per"><div class="when">'+hm(f.timeFrom)+' <span class="ch">'+chg(f)+'</span></div><div class="desc">'+(parts.join("")||'<span class="k">—</span>')+'</div></div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var res=await xemd.proxy.fetch("https://aviationweather.gov/api/data/taf?ids="+encodeURIComponent(settings.airport)+"&format=json",{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();var t=Array.isArray(d)?d[0]:d;
+      if(!t||!t.rawTAF)throw new Error("no TAF for "+settings.airport);
+      render(t);
+      $("status").className="";$("status").textContent="aviationweather.gov · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="taf: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="TAF unavailable — check ICAO"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,1800000);
+  })();
+</script></body></html>

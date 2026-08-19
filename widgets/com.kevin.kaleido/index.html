@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Kaleidoscope</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#04040a}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={segments:8,speed:1};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d"),W,H,dpr,t=0;
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;ctx.fillStyle="#04040a";ctx.fillRect(0,0,W,H)}
+  function hsl(h,s,l,a){return "hsla("+((h%360)+360)%360+","+s+"%,"+l+"%,"+a+")"}
+  // motif drawn in a wedge starting along +x axis, angle 0..seg
+  function motif(R,seg){
+    var n=5;
+    for(var i=0;i<n;i++){
+      var f=i/n;
+      var ang=(seg*0.5)*(0.3+0.5*Math.sin(t*0.3+i*1.7));
+      var rad=R*(0.2+0.7*f)+Math.sin(t*0.6+i)*R*0.05;
+      var x=Math.cos(ang)*rad, y=Math.sin(ang)*rad;
+      var sz=R*(0.04+0.09*Math.abs(Math.sin(t*0.4+i*2.1)));
+      var hue=t*24+i*55;
+      var g=ctx.createRadialGradient(x,y,0,x,y,sz);
+      g.addColorStop(0,hsl(hue,90,65,0.9));g.addColorStop(1,hsl(hue+40,90,50,0));
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,sz,0,7);ctx.fill();
+    }
+    // a couple of thin arcs
+    ctx.lineWidth=1.6*dpr;
+    for(var k=0;k<2;k++){var rr=R*(0.35+0.35*k)+Math.sin(t*0.5+k)*R*0.06;
+      ctx.strokeStyle=hsl(t*18+k*120+180,85,60,0.5);ctx.beginPath();ctx.arc(0,0,rr,0,seg);ctx.stroke();}
+  }
+  function frame(){
+    ctx.fillStyle="rgba(4,4,10,0.10)";ctx.fillRect(0,0,W,H);
+    var cx=W/2,cy=H/2,R=Math.min(W,H)*0.62,N=Math.max(3,Math.round(Number(settings.segments)||8)),seg=Math.PI*2/N;
+    ctx.save();ctx.translate(cx,cy);ctx.globalCompositeOperation="lighter";
+    ctx.rotate(t*0.05*(Number(settings.speed)||1));
+    for(var i=0;i<N;i++){
+      ctx.save();ctx.rotate(i*seg);
+      // clip to wedge
+      ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,R,0,seg);ctx.closePath();ctx.clip();
+      motif(R,seg);
+      ctx.restore();
+      // mirrored wedge
+      ctx.save();ctx.rotate(i*seg);ctx.scale(1,-1);
+      ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,R,0,seg);ctx.closePath();ctx.clip();
+      motif(R,seg);
+      ctx.restore();
+    }
+    ctx.restore();ctx.globalCompositeOperation="source-over";
+    t+=0.02*(Number(settings.speed)||1);
+    requestAnimationFrame(frame);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s)});
+    xemd.ready();resize();requestAnimationFrame(frame);window.addEventListener("resize",resize);
+  })();
+</script></body></html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Focus Timer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --bg: #0b0e15; --text: #e6e9ef; --text-mid: #8089a6; --text-dim: #565f89;
+          --focus: #f7768e; --break: #9ece6a; --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased;
+               -webkit-user-select: none; user-select: none; }
+  #root { position: relative; width: 100%; height: 100%; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #ctr { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+  #mode { text-transform: uppercase; letter-spacing: .14em; font-weight: 600; }
+  #mode.focus { color: var(--focus); } #mode.break { color: var(--break); }
+  #time { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 700; line-height: 1; margin-top: .12em; }
+  #hint { color: var(--text-dim); margin-top: .5em; }
+  #round { color: var(--text-mid); font-family: var(--mono); margin-top: .3em; }
+  /* tap zones */
+  .tap { position: absolute; top: 0; bottom: 0; width: 34%; cursor: pointer; }
+  #tapMain { left: 33%; width: 34%; } #tapReset { right: 0; } #tapSkip { left: 0; }
+</style>
+</head>
+<body>
+  <div id="root">
+    <canvas id="c"></canvas>
+    <div id="ctr">
+      <div id="mode" class="focus">Focus</div>
+      <div id="time">25:00</div>
+      <div id="round"></div>
+      <div id="hint">tap to start</div>
+    </div>
+    <div class="tap" id="tapSkip" title="Skip"></div>
+    <div class="tap" id="tapMain" title="Start/Pause"></div>
+    <div class="tap" id="tapReset" title="Reset"></div>
+  </div>
+<script>
+(function () {
+  "use strict";
+  var settings = { workMinutes: 25, breakMinutes: 5, longBreak: 15 };
+  var $ = function (id) { return document.getElementById(id); };
+  var canvas = $("c"), ctx = canvas.getContext("2d");
+  var st = { mode: "focus", running: false, remaining: 25 * 60, total: 25 * 60, round: 1, endAt: 0 };
+  var dpr = 1;
+
+  function dur(mode) {
+    if (mode === "focus") return (Number(settings.workMinutes) || 25) * 60;
+    if (mode === "long") return (Number(settings.longBreak) || 15) * 60;
+    return (Number(settings.breakMinutes) || 5) * 60;
+  }
+  function setMode(mode) { st.mode = mode; st.total = dur(mode); st.remaining = st.total; st.endAt = 0; st.running = false; }
+
+
+  function complete() {
+    if (st.mode === "focus") { var longB = st.round % 4 === 0; setMode(longB ? "long" : "break"); }
+    else { st.round += 1; setMode("focus"); }
+    st.running = false;
+  }
+
+  function toggle() {
+    if (st.running) { st.remaining = Math.max(0, Math.round((st.endAt - Date.now()) / 1000)); st.running = false; }
+    else { st.endAt = Date.now() + st.remaining * 1000; st.running = true; }
+  }
+  function reset() { setMode(st.mode); }
+  function skip() { complete(); }
+
+  $("tapMain").addEventListener("click", toggle);
+  $("tapReset").addEventListener("click", reset);
+  $("tapSkip").addEventListener("click", skip);
+
+  function fmt(s) { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+
+  function draw() {
+    if (st.running) {
+      st.remaining = (st.endAt - Date.now()) / 1000;
+      if (st.remaining <= 0) { st.remaining = 0; complete(); }
+    }
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var cw = canvas.clientWidth, ch = canvas.clientHeight;
+    var w = Math.round(cw * dpr), h = Math.round(ch * dpr);
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    ctx.clearRect(0, 0, w, h);
+    var cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.40, lw = Math.max(6 * dpr, R * 0.11);
+    var col = st.mode === "focus" ? "#f7768e" : "#9ece6a";
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.strokeStyle = "rgba(230,233,239,.10)"; ctx.lineWidth = lw; ctx.stroke();
+    var frac = st.total > 0 ? st.remaining / st.total : 0;
+    ctx.beginPath(); ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + frac * 2 * Math.PI, false);
+    ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = "round"; ctx.stroke();
+
+    var m = $("mode"); m.className = st.mode === "focus" ? "focus" : "break";
+    m.textContent = st.mode === "focus" ? "Focus" : st.mode === "long" ? "Long Break" : "Break";
+    $("time").textContent = fmt(st.remaining);
+    $("round").textContent = "Round " + st.round + (st.mode === "focus" ? "" : " · break");
+    $("hint").textContent = st.running ? "tap center to pause" : (st.remaining < st.total ? "paused · tap to resume" : "tap center to start");
+    var base = Math.min(cw, ch);
+    $("time").style.fontSize = base * 0.24 + "px";
+    $("mode").style.fontSize = base * 0.075 + "px";
+    $("round").style.fontSize = base * 0.055 + "px";
+    $("hint").style.fontSize = base * 0.05 + "px";
+    requestAnimationFrame(draw);
+  }
+
+  function apply() { settings = Object.assign(settings, (window.Vardek && Vardek.settings) || {}); if (!st.running) setMode(st.mode); }
+  document.addEventListener("vardek:ready", apply);
+  if (window.Vardek && Vardek.onSettingsChange) Vardek.onSettingsChange(function (s) { if (s) settings = Object.assign(settings, s); if (!st.running) setMode(st.mode); });
+  apply();
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>

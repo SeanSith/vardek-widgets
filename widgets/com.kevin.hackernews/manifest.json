@@ -1,0 +1,54 @@
+{
+  "id": "com.kevin.hackernews",
+  "name": "Hacker News",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 300,
+  "permissions": {
+    "proxy": [
+      "https://hn.algolia.com/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "feed": {
+      "type": "enum",
+      "label": "Feed",
+      "values": [
+        "top",
+        "new",
+        "ask",
+        "show"
+      ],
+      "default": "top"
+    },
+    "count": {
+      "type": "number",
+      "label": "Stories to show (max 30)",
+      "default": 14
+    }
+  }
+}

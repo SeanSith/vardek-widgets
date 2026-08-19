@@ -1,0 +1,50 @@
+{
+  "id": "com.kevin.calendar",
+  "name": "Calendar",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 600,
+  "permissions": {
+    "proxy": [],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "weekStart": {
+      "type": "enum",
+      "label": "Week starts on",
+      "values": [
+        "sunday",
+        "monday"
+      ],
+      "default": "sunday"
+    },
+    "showMoon": {
+      "type": "boolean",
+      "label": "Moon phases",
+      "default": true
+    }
+  }
+}

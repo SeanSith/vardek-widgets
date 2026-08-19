@@ -1,0 +1,48 @@
+{
+  "id": "com.kevin.rss",
+  "name": "RSS",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 900,
+  "permissions": {
+    "proxy": [
+      "https://**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "feeds": {
+      "type": "string",
+      "label": "Feed URLs (comma-separated)",
+      "default": "https://hnrss.org/frontpage, https://feeds.arstechnica.com/arstechnica/index, https://www.theverge.com/rss/index.xml"
+    },
+    "count": {
+      "type": "number",
+      "label": "Items to show (max 24)",
+      "default": 16
+    }
+  }
+}

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bitcoin Mempool</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0c0a06;--surface:#1a1508;--border:#33280f;--text:#f5ecd8;--mid:#b3a179;--dim:#7a6b48;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--btc:#f7931a;--cheap:#6bd08a;--mid2:#e0af68;--busy:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:22px 30px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:16px}
+  .head h1{font-size:1.3rem;font-weight:700}.head h1 .ic{color:var(--btc);margin-right:8px}
+  .head .sp{flex:1}.head .tip{font-family:var(--mono);font-size:.9rem;color:var(--dim)}.head .tip b{color:var(--btc)}
+  .body{flex:1;min-height:0;display:flex;gap:30px;align-items:center}
+  .fees{flex:0 0 42%;border-right:1px solid var(--border);padding-right:28px}
+  .fees .lab{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+  .fees .hero{display:flex;align-items:baseline;gap:10px;margin:4px 0 16px}
+  .fees .hero .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:4rem;line-height:1}
+  .fees .hero .u{font-family:var(--mono);color:var(--mid);font-size:1rem}
+  .tiers{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .tier{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px}
+  .tier .k{font-size:.72rem;color:var(--dim)}
+  .tier .v{font-family:var(--mono);font-weight:700;font-size:1.3rem;margin-top:1px}
+  .tier .u{font-size:.65rem;color:var(--dim)}
+  .mp{flex:1;min-width:0}
+  .mp .lab{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+  .mp .stats{display:flex;gap:26px;margin-bottom:14px}
+  .mp .stat .n{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:2rem}
+  .mp .stat .t{font-size:.82rem;color:var(--mid)}
+  .blocks{display:flex;gap:5px;flex-wrap:wrap}
+  .blk{width:52px;height:52px;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--mono);color:#0c0a06;font-weight:700}
+  .blk .f{font-size:.95rem}.blk .s{font-size:.6rem;opacity:.8}
+  #status{position:fixed;left:30px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--busy)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">₿</span>Bitcoin Mempool</h1><span class="sp"></span><span class="tip" id="tip"></span></div>
+    <div class="body">
+      <div class="fees"><div class="lab">Next block fee</div>
+        <div class="hero"><div class="v" id="fast">—</div><div class="u">sat/vB</div></div>
+        <div class="tiers">
+          <div class="tier"><div class="k">~30 min</div><div class="v" id="half">—</div><div class="u">sat/vB</div></div>
+          <div class="tier"><div class="k">~1 hour</div><div class="v" id="hour">—</div><div class="u">sat/vB</div></div>
+          <div class="tier"><div class="k">Economy</div><div class="v" id="econ">—</div><div class="u">sat/vB</div></div>
+        </div></div>
+      <div class="mp"><div class="lab">Mempool</div>
+        <div class="stats"><div class="stat"><div class="n" id="count">—</div><div class="t">unconfirmed txs</div></div>
+          <div class="stat"><div class="n" id="backlog">—</div><div class="t">blocks to clear</div></div></div>
+        <div class="lab">Projected blocks</div><div class="blocks" id="blocks"></div>
+      </div>
+    </div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var $=function(i){return document.getElementById(i)}, last=0;
+  function feeColor(f){return f<5?"#6bd08a":f<20?"#e0af68":f<50?"#f7931a":"#f7768e"}
+  function nf(n){return n.toLocaleString()}
+  async function jget(u){var r=await xemd.proxy.fetch(u,{headers:{Accept:"application/json"}});if(!r.ok)throw new Error("HTTP "+r.status);return r.json()}
+  async function tget(u){var r=await xemd.proxy.fetch(u,{headers:{Accept:"text/plain"}});if(!r.ok)throw new Error("HTTP "+r.status);return (await r.text()).trim()}
+  async function load(){
+    if(Date.now()-last<20000)return; last=Date.now();
+    try{
+      var fees=await jget("https://mempool.space/api/v1/fees/recommended");
+      var mp=await jget("https://mempool.space/api/mempool");
+      var height=null;try{height=await tget("https://mempool.space/api/blocks/tip/height")}catch(e){}
+      var mpb=[];try{mpb=await jget("https://mempool.space/api/v1/fees/mempool-blocks")}catch(e){}
+      $("fast").textContent=fees.fastestFee;$("fast").style.color=feeColor(fees.fastestFee);
+      $("half").textContent=fees.halfHourFee;$("hour").textContent=fees.hourFee;$("econ").textContent=fees.economyFee;
+      $("count").textContent=nf(mp.count);
+      var backlog=Math.max(1,Math.ceil((mp.vsize||0)/1e6));$("backlog").textContent="~"+backlog;
+      if(height)$("tip").innerHTML="tip block <b>#"+nf(parseInt(height,10))+"</b>";
+      $("blocks").innerHTML=(mpb||[]).slice(0,7).map(function(b){var f=b.medianFee<10?Math.round(b.medianFee*10)/10:Math.round(b.medianFee);
+        return '<div class="blk" style="background:'+feeColor(f)+'"><div class="f">'+f+'</div><div class="s">sat/vB</div></div>';}).join("");
+      $("boot").classList.add("hidden");$("wrap").style.display="flex";
+      $("status").className="";$("status").textContent="mempool.space · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="mempool: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="mempool data unavailable"}
+  }
+  (async function(){xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,60000)})();
+</script></body></html>

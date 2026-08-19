@@ -1,0 +1,21 @@
+# OS / tooling
+.DS_Store
+**/.DS_Store
+.gstack/
+**/.gstack/
+**/.impeccable/
+
+# generated widget data (daemons regenerate locally)
+**/data.js
+**/data.json
+**/.photocache.json
+**/*.log
+
+# daemon-downloaded media (regenerated locally; not source)
+widgets/com.kevin.photoframe/img/
+widgets/com.kevin.apod/img/
+widgets/com.kevin.xkcd/img/
+widgets/com.kevin.epic/img/
+widgets/com.kevin.art/img/
+widgets/com.kevin.cocktail/img/
+widgets/com.kevin.recipe/img/

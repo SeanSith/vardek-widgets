@@ -1,0 +1,66 @@
+{
+  "id": "com.kevin.fishtank",
+  "name": "Fish Tank",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    },
+    {
+      "cols": 6,
+      "rows": 1
+    },
+    {
+      "cols": 4,
+      "rows": 1
+    },
+    {
+      "cols": 3,
+      "rows": 1
+    },
+    {
+      "cols": 2,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "showNames": {
+      "type": "boolean",
+      "label": "Show fish names",
+      "default": true
+    },
+    "showStatus": {
+      "type": "boolean",
+      "label": "Show tank / peer status",
+      "default": true
+    },
+    "tapToInspect": {
+      "type": "boolean",
+      "label": "Tap a fish to inspect",
+      "default": true
+    }
+  }
+}

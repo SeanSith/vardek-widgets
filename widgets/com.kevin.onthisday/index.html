@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>On This Day</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#bb9af7;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;height:100vh;padding:26px 30px;gap:28px}
+  .feature{flex:1;min-width:0;display:flex;flex-direction:column}
+  .date{font-size:1.15rem;color:var(--accent);font-weight:700;letter-spacing:.02em;text-transform:uppercase}
+  .card{flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0;position:relative}
+  .card .inner{transition:opacity .5s}
+  .card .yr{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:4.6rem;line-height:1;color:var(--text)}
+  .card .yr .ago{font-family:-apple-system,sans-serif;font-size:1.1rem;color:var(--dim);font-weight:500;margin-left:12px}
+  .card .txt{font-size:1.55rem;line-height:1.4;margin-top:14px;max-width:42ch}
+  .dots{display:flex;gap:6px;margin-top:16px}
+  .dots i{width:7px;height:7px;border-radius:50%;background:var(--border);transition:background .3s,width .3s}
+  .dots i.on{background:var(--accent);width:20px;border-radius:4px}
+  .aside{flex:0 0 30%;min-width:0;border-left:1px solid var(--border);padding-left:26px;display:flex;flex-direction:column;gap:16px;overflow:hidden}
+  .grp .h{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px}
+  .grp .it{display:flex;gap:10px;padding:4px 0;font-size:.95rem;line-height:1.25}
+  .grp .it .y{font-family:var(--mono);color:var(--accent);font-weight:700;flex:0 0 3em}
+  .grp .it .t{color:var(--mid);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #status{position:fixed;left:30px;bottom:8px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+  @media(max-width:820px){#wrap{flex-direction:column;padding:16px;gap:12px}.aside{flex:0 0 auto;border-left:none;border-top:1px solid var(--border);padding-left:0;padding-top:12px}.card .yr{font-size:3rem}.card .txt{font-size:1.15rem}}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="feature">
+      <div class="date" id="date"></div>
+      <div class="card"><div class="inner" id="inner"><div class="yr" id="yr"></div><div class="txt" id="txt"></div></div>
+        <div class="dots" id="dots"></div></div>
+    </div>
+    <div class="aside" id="aside"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={rotateSec:9,category:"selected"};
+  var $=function(i){return document.getElementById(i)}, last=0, feat=[], idx=0, timer=null;
+  function agoTxt(y){var d=new Date().getFullYear()-y;return d<=0?"":d+" year"+(d!==1?"s":"")+" ago"}
+  function esc(s){return String(s).replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function show(i){
+    if(!feat.length)return;
+    idx=(i+feat.length)%feat.length;var e=feat[idx];
+    var inner=$("inner");inner.style.opacity="0";
+    setTimeout(function(){
+      $("yr").innerHTML=esc(String(e.year))+'<span class="ago">'+agoTxt(e.year)+'</span>';
+      $("txt").textContent=e.text;inner.style.opacity="1";
+    },320);
+    var dots=$("dots").children;for(var k=0;k<dots.length;k++)dots[k].className=k===idx?"on":"";
+  }
+  function schedule(){if(timer)clearInterval(timer);timer=setInterval(function(){show(idx+1)},Math.max(4,Number(settings.rotateSec)||9)*1000)}
+  function render(d){
+    var now=new Date();
+    $("date").textContent=now.toLocaleDateString([],{month:"long",day:"numeric"});
+    var src=(settings.category==="events"?d.events:d.selected)||d.selected||d.events||[];
+    feat=src.slice(0,10).map(function(e){return{year:e.year,text:e.text}});
+    if(!feat.length){feat=[{year:now.getFullYear(),text:"No events found for today."}]}
+    $("dots").innerHTML=feat.map(function(){return"<i></i>"}).join("");
+    idx=0;show(0);schedule();
+    // aside: births + deaths
+    function grp(title,arr){if(!arr||!arr.length)return"";
+      return '<div class="grp"><div class="h">'+title+'</div>'+arr.slice(0,4).map(function(e){
+        var who=(e.pages&&e.pages[0]&&(e.pages[0].titles&&e.pages[0].titles.normalized))||e.text;
+        return '<div class="it"><span class="y">'+e.year+'</span><span class="t">'+esc(who)+'</span></div>'}).join("")+'</div>'}
+    $("aside").innerHTML=grp("Born",d.births)+grp("Died",d.deaths)+grp("Holidays",(d.holidays||[]).map(function(h){return{year:"·",text:h.text}}));
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var n=new Date(),mm=String(n.getMonth()+1).padStart(2,"0"),dd=String(n.getDate()).padStart(2,"0");
+      var url="https://en.wikipedia.org/api/rest_v1/feed/onthisday/all/"+mm+"/"+dd;
+      var res=await xemd.proxy.fetch(url,{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      render(await res.json());
+      $("status").className="";$("status").textContent="Wikipedia · "+n.toLocaleDateString([],{month:"short",day:"numeric"});
+    }catch(e){$("status").className="err";$("status").textContent="wikipedia: "+(e.message||e);if(!feat.length)$("boot").textContent="on-this-day unavailable"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);if(feat.length){schedule()}last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,3600000);
+  })();
+</script></body></html>

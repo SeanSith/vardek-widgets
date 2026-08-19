@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Breathe</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#080d14;--text:#e6e9ef;--text-mid:#8089a6;--text-dim:#565f89;--accent:#7dcfff}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none}
+  #root{position:relative;width:100%;height:100%;cursor:pointer}
+  canvas{position:absolute;inset:0;width:100%;height:100%}
+  #ctr{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+  #phase{font-weight:600;letter-spacing:.02em}
+  #count{font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;color:var(--text-mid);margin-top:.2em}
+  #hint{position:absolute;left:0;right:0;bottom:8%;text-align:center;color:var(--text-dim);font-size:.9rem;pointer-events:none}
+</style></head>
+<body>
+  <div id="root">
+    <canvas id="c"></canvas>
+    <div id="ctr"><div id="phase">Breathe</div><div id="count"></div></div>
+    <div id="hint">tap to begin</div>
+  </div>
+<script>
+(function(){
+  "use strict";
+  var settings={pattern:"box",accent:"#7dcfff"};
+  var $=function(i){return document.getElementById(i)};
+  var canvas=$("c"),ctx=canvas.getContext("2d"),W=0,H=0,dpr=1;
+  // phases: [label, seconds, targetScale]
+  var PATTERNS={
+    box:[["Inhale",4,1],["Hold",4,1],["Exhale",4,0.4],["Hold",4,0.4]],
+    "478":[["Inhale",4,1],["Hold",7,1],["Exhale",8,0.4]],
+    calm:[["Inhale",5,1],["Exhale",5,0.4]],
+    coherent:[["Inhale",5.5,1],["Exhale",5.5,0.4]]
+  };
+  var running=false,phase=0,tPhase=0,scale=0.4;
+  function pat(){return PATTERNS[settings.pattern]||PATTERNS.box}
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);var w=Math.round(canvas.clientWidth*dpr),h=Math.round(canvas.clientHeight*dpr);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;W=w;H=h}}
+  $("root").addEventListener("click",function(){running=!running;$("hint").style.display=running?"none":"block";if(running){$("hint").textContent="tap to pause"}});
+
+  var last=null;
+  function loop(now){
+    var dt=last==null?0:Math.min(0.05,(now-last)/1000);last=now;
+    resize();
+    var col=settings.accent||"#7dcfff";
+    document.documentElement.style.setProperty("--accent",col);
+    var p=pat();
+    if(running){
+      tPhase+=dt;
+      var cur=p[phase];
+      if(tPhase>=cur[1]){tPhase=0;phase=(phase+1)%p.length;cur=p[phase]}
+      var from=phase===0?p[p.length-1][2]:p[phase-1][2];
+      var to=cur[2];var k=Math.min(1,tPhase/cur[1]);
+      // ease
+      var e=k<0.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+      scale=from+(to-from)*e;
+      $("phase").textContent=cur[0];
+      $("count").textContent=Math.ceil(cur[1]-tPhase)+"";
+    } else { $("phase").textContent="Breathe"; $("count").textContent=""; }
+    // draw
+    ctx.clearRect(0,0,W,H);ctx.fillStyle="#080d14";ctx.fillRect(0,0,W,H);
+    var cx=W/2,cy=H/2,base=Math.min(W,H)*0.34,r=base*(0.5+scale*0.7);
+    // rings
+    var rgb=hexRgb(col);
+    var g=ctx.createRadialGradient(cx,cy,0,cx,cy,r*1.5);
+    g.addColorStop(0,"rgba("+rgb+",0.28)");g.addColorStop(0.6,"rgba("+rgb+",0.10)");g.addColorStop(1,"rgba("+rgb+",0)");
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,r*1.5,0,7);ctx.fill();
+    ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.strokeStyle="rgba("+rgb+",0.9)";ctx.lineWidth=3*dpr;ctx.stroke();
+    ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.fillStyle="rgba("+rgb+",0.06)";ctx.fill();
+    // petals
+    for(var i=0;i<6;i++){var a=i/6*Math.PI*2+ (running?now/4000:0);ctx.beginPath();ctx.arc(cx+Math.cos(a)*r,cy+Math.sin(a)*r,base*0.12*(0.6+scale*0.5),0,7);ctx.fillStyle="rgba("+rgb+",0.10)";ctx.fill()}
+    var base2=Math.min(W,H);
+    $("phase").style.fontSize=base2*0.06+"px";$("count").style.fontSize=base2*0.09+"px";
+    requestAnimationFrame(loop);
+  }
+  function hexRgb(h){h=h.replace("#","");if(h.length===3)h=h.split("").map(function(c){return c+c}).join("");var n=parseInt(h,16);return (n>>16&255)+","+(n>>8&255)+","+(n&255)}
+  function apply(){settings=Object.assign(settings,(window.Vardek&&Vardek.settings)||{})}
+  document.addEventListener("vardek:ready",apply);
+  if(window.Vardek&&Vardek.onSettingsChange)Vardek.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);phase=0;tPhase=0});
+  apply();requestAnimationFrame(loop);
+})();
+</script></body></html>

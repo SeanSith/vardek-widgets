@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Maze</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#05070d}
+  #c{position:absolute;inset:0;width:100%;height:100%;display:block}
+</style></head>
+<body>
+  <canvas id="c"></canvas>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={palette:"cyan",speed:4};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d"),W=0,H=0,dpr=1,cs=26;
+  var PAL={cyan:["#22d3ee","#0891b2"],magenta:["#e879f9","#a21caf"],amber:["#fbbf24","#b45309"],mono:["#cbd5e1","#64748b"]};
+  var cols,rows,cells,stack,cur,phase,solvecells,solveIdx,resetAt;
+  function idx(c,r){return r*cols+c}
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;init()}
+  function init(){
+    cs=Math.max(16,Math.round(Math.min(W,H)/24));
+    cols=Math.floor(W/cs);rows=Math.floor(H/cs);
+    cells=[];for(var i=0;i<cols*rows;i++)cells.push({v:false,w:[true,true,true,true]}); // N E S W
+    stack=[];cur=0;cells[0].v=true;phase="carve";solvecells=null;solveIdx=0;
+    ctx.fillStyle="#05070d";ctx.fillRect(0,0,W,H);
+  }
+  function offset(){return [(W-cols*cs)/2,(H-rows*cs)/2]}
+  function center(i){var o=offset();return [o[0]+(i%cols)*cs+cs/2,o[1]+Math.floor(i/cols)*cs+cs/2]}
+  function neighbors(i){var c=i%cols,r=Math.floor(i/cols),out=[];
+    if(r>0&&!cells[idx(c,r-1)].v)out.push([idx(c,r-1),0,2]);
+    if(c<cols-1&&!cells[idx(c+1,r)].v)out.push([idx(c+1,r),1,3]);
+    if(r<rows-1&&!cells[idx(c,r+1)].v)out.push([idx(c,r+1),2,0]);
+    if(c>0&&!cells[idx(c-1,r)].v)out.push([idx(c-1,r),3,1]);
+    return out;}
+  function carveEdge(a,b,col,glow){var pa=center(a),pb=center(b);
+    ctx.strokeStyle=col;ctx.lineWidth=3*dpr;ctx.lineCap="round";ctx.shadowColor=col;ctx.shadowBlur=glow*dpr;
+    ctx.beginPath();ctx.moveTo(pa[0],pa[1]);ctx.lineTo(pb[0],pb[1]);ctx.stroke();ctx.shadowBlur=0;}
+  function bfs(){var prev=new Array(cols*rows).fill(-1),q=[0],seen=new Array(cols*rows).fill(false);seen[0]=true;
+    var goal=cols*rows-1;
+    while(q.length){var i=q.shift();if(i===goal)break;var c=i%cols,r=Math.floor(i/cols);
+      var opts=[];if(!cells[i].w[0])opts.push(idx(c,r-1));if(!cells[i].w[1])opts.push(idx(c+1,r));if(!cells[i].w[2])opts.push(idx(c,r+1));if(!cells[i].w[3])opts.push(idx(c-1,r));
+      opts.forEach(function(n){if(n>=0&&n<cols*rows&&!seen[n]){seen[n]=true;prev[n]=i;q.push(n)}});}
+    var path=[],at=goal;while(at!==-1){path.push(at);at=prev[at]}return path.reverse();}
+  function frame(){
+    var pal=PAL[settings.palette]||PAL.cyan;
+    if(phase==="carve"){
+      var steps=Math.max(1,Number(settings.speed)||3);
+      for(var s=0;s<steps;s++){
+        var nb=neighbors(cur);
+        if(nb.length){var pick=nb[Math.floor(Math.random()*nb.length)];
+          cells[cur].w[pick[1]]=false;cells[pick[0]].w[pick[2]]=false;cells[pick[0]].v=true;
+          carveEdge(cur,pick[0],pal[0],8);stack.push(cur);cur=pick[0];
+        }else if(stack.length){cur=stack.pop();}
+        else{phase="solve";solvecells=bfs();solveIdx=0;break;}
+      }
+    }else if(phase==="solve"){
+      // fade maze slightly, draw solution progressively
+      if(solveIdx===0){ctx.fillStyle="rgba(5,7,13,0.55)";ctx.fillRect(0,0,W,H);}
+      var per=Math.max(1,Math.round((Number(settings.speed)||3)));
+      for(var k=0;k<per&&solveIdx<solvecells.length-1;k++){carveEdge(solvecells[solveIdx],solvecells[solveIdx+1],pal[0],14);solveIdx++;}
+      if(solveIdx>=solvecells.length-1){phase="hold";resetAt=0;}
+    }else if(phase==="hold"){resetAt=(resetAt||0)+1;if(resetAt>140){ctx.fillStyle="rgba(5,7,13,0.06)";ctx.fillRect(0,0,W,H);if(resetAt>180)init();}}
+    requestAnimationFrame(frame);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s)});
+    xemd.ready();resize();requestAnimationFrame(frame);window.addEventListener("resize",resize);
+  })();
+</script></body></html>

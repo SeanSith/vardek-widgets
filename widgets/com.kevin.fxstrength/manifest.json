@@ -1,0 +1,48 @@
+{
+  "id": "com.kevin.fxstrength",
+  "name": "Currency Strength",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 3600,
+  "permissions": {
+    "proxy": [
+      "https://api.frankfurter.dev/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "symbols": {
+      "type": "string",
+      "label": "Currencies (comma)",
+      "default": "EUR,GBP,JPY,CAD,AUD,CHF,CNY,SEK,NZD,MXN"
+    },
+    "days": {
+      "type": "number",
+      "label": "Lookback days",
+      "default": 30
+    }
+  }
+}

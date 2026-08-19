@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tonight's Sky</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#070a12;--surface:#131a2a;--border:#243149;--text:#e6ecff;--mid:#8496b8;--dim:#556074;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#9db4ff;--moon:#e8e0c8}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:22px 30px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:4px}
+  .head h1{font-size:1.3rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sp{flex:1}.head .loc{font-family:var(--mono);font-size:.8rem;color:var(--dim)}
+  .timeline{margin:14px 0 6px}
+  .timeline canvas{width:100%;height:110px;display:block}
+  .body{flex:1;min-height:0;display:flex;gap:26px;align-items:center}
+  .dark{flex:0 0 46%;border-right:1px solid var(--border);padding-right:26px}
+  .dark .lab{font-size:.82rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+  .dark .win{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:2.5rem;line-height:1.05;margin:4px 0 2px}
+  .dark .dur{color:var(--mid);font-size:1rem}
+  .dark .rows{display:flex;gap:22px;margin-top:16px}
+  .dark .rows .c{flex:1}
+  .dark .rows .k{font-size:.75rem;color:var(--dim);text-transform:uppercase}
+  .dark .rows .v{font-family:var(--mono);font-size:1.15rem;font-weight:700;margin-top:2px}
+  .moon{flex:1;display:flex;align-items:center;gap:22px;min-width:0}
+  .moon .disc{width:110px;height:110px;flex-shrink:0}
+  .moon .m .ph{font-size:1.5rem;font-weight:700}
+  .moon .m .il{color:var(--mid);font-size:1.05rem;margin-top:2px}
+  .moon .m .rs{font-family:var(--mono);font-size:.9rem;color:var(--dim);margin-top:10px;line-height:1.5}
+  .moon .m .note{margin-top:10px;font-size:.92rem;padding:6px 10px;border-radius:8px;display:inline-block}
+  .moon .m .note.good{background:rgba(107,208,138,.15);color:#8fd6a3}
+  .moon .m .note.bad{background:rgba(232,224,200,.14);color:var(--moon)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">🌌</span>Tonight's Sky</h1><span class="sp"></span><span class="loc" id="loc"></span></div>
+    <div class="timeline"><canvas id="tl"></canvas></div>
+    <div class="body">
+      <div class="dark"><div class="lab">Astronomical darkness</div><div class="win" id="darkwin">—</div><div class="dur" id="darkdur"></div>
+        <div class="rows"><div class="c"><div class="k">Sunset</div><div class="v" id="sunset"></div></div><div class="c"><div class="k">Sunrise</div><div class="v" id="sunrise"></div></div><div class="c"><div class="k">Night length</div><div class="v" id="nightlen"></div></div></div>
+      </div>
+      <div class="moon"><canvas class="disc" id="disc" width="110" height="110"></canvas>
+        <div class="m"><div class="ph" id="moonph"></div><div class="il" id="moonil"></div><div class="rs" id="moonrs"></div><div class="note" id="moonnote"></div></div>
+      </div>
+    </div>
+  </div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={latitude:37.7749,longitude:-122.4194};
+  var $=function(i){return document.getElementById(i)}, D2R=Math.PI/180, R2D=180/Math.PI;
+  function jd(date){return date.getTime()/86400000+2440587.5}
+  function norm360(x){x%=360;return x<0?x+360:x}
+  // Sun equatorial coords (deg) for a JD
+  function sun(J){var n=J-2451545.0;
+    var L=norm360(280.460+0.9856474*n), g=norm360(357.528+0.9856003*n)*D2R;
+    var lam=(L+1.915*Math.sin(g)+0.020*Math.sin(2*g))*D2R, eps=(23.439-0.0000004*n)*D2R;
+    var ra=Math.atan2(Math.cos(eps)*Math.sin(lam),Math.cos(lam))*R2D, dec=Math.asin(Math.sin(eps)*Math.sin(lam))*R2D;
+    return {ra:norm360(ra),dec:dec};}
+  // Low-precision Moon ecliptic->equatorial
+  function moon(J){var T=(J-2451545.0)/36525;
+    var Lp=norm360(218.316+481267.881*T), M=norm360(134.963+477198.867*T)*D2R, Mp=norm360(357.529+35999.050*T)*D2R,
+        Dm=norm360(297.850+445267.112*T)*D2R, F=norm360(93.272+483202.018*T)*D2R;
+    var lon=Lp+6.289*Math.sin(M)+1.274*Math.sin(2*Dm-M)+0.658*Math.sin(2*Dm)+0.214*Math.sin(2*M)-0.186*Math.sin(Mp)-0.114*Math.sin(2*F);
+    var lat=5.128*Math.sin(F)+0.281*Math.sin(M+F)+0.278*Math.sin(F-M)+0.173*Math.sin(2*Dm-F);
+    var eps=(23.439-0.0000004*(J-2451545.0))*D2R, ll=lon*D2R, bb=lat*D2R;
+    var ra=Math.atan2(Math.sin(ll)*Math.cos(eps)-Math.tan(bb)*Math.sin(eps),Math.cos(ll))*R2D;
+    var dec=Math.asin(Math.sin(bb)*Math.cos(eps)+Math.cos(bb)*Math.sin(eps)*Math.sin(ll))*R2D;
+    return {ra:norm360(ra),dec:dec};}
+  function gmst(J){return norm360(280.46061837+360.98564736629*(J-2451545.0));}
+  function altitude(eq,J,lat,lon){var lst=norm360(gmst(J)+lon), H=(lst-eq.ra)*D2R, la=lat*D2R, de=eq.dec*D2R;
+    return Math.asin(Math.sin(la)*Math.sin(de)+Math.cos(la)*Math.cos(de)*Math.cos(H))*R2D;}
+  // find first time (Date) in [t0,t1] where alt crosses `thresh` going `dir` (-1 down, +1 up)
+  function findCross(body,t0,t1,lat,lon,thresh,dir){
+    var step=5*60000, prev=null, prevT=t0;
+    for(var t=t0;t<=t1;t+=step){var a=altitude(body(jd(new Date(t))),jd(new Date(t)),lat,lon);
+      if(prev!==null){if(dir<0&&prev>=thresh&&a<thresh || dir>0&&prev<thresh&&a>=thresh){
+        // linear interp
+        var f=(thresh-prev)/(a-prev);return new Date(prevT+f*step);}}
+      prev=a;prevT=t;}
+    return null;}
+  function hm(d){return d?d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):"—"}
+  function dur(ms){if(ms==null||ms<0)return"—";var m=Math.round(ms/60000),h=Math.floor(m/60);return h+"h "+(m%60)+"m"}
+  var SYN=29.530588853;
+  function moonPhase(J){var age=((J-2451550.09765)/SYN)%1;if(age<0)age+=1;
+    var illum=(1-Math.cos(age*2*Math.PI))/2, waxing=age<0.5, name;
+    if(illum>=0.985)name="Full Moon";else if(illum<=0.02)name="New Moon";
+    else if(illum<0.46)name=waxing?"Waxing Crescent":"Waning Crescent";
+    else if(illum<0.54)name=waxing?"First Quarter":"Last Quarter";
+    else name=waxing?"Waxing Gibbous":"Waning Gibbous";
+    return {age:age,illum:illum,name:name};}
+  function drawMoon(cv,age){var ctx=cv.getContext("2d"),W=cv.width,H=cv.height,r=W/2-6,cx=W/2,cy=H/2;
+    ctx.clearRect(0,0,W,H);ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.fillStyle="#2a2f3a";ctx.fill();
+    // lit fraction via terminator
+    ctx.save();ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.clip();
+    var phase=age; // 0..1
+    for(var x=-r;x<=r;x++){var frac=x/r; // -1..1
+      // terminator position
+      var cosPhase=Math.cos(phase*2*Math.PI);
+      var lit; var term=cosPhase; 
+      if(phase<0.5){lit=(frac> term)?1:0;}else{lit=(frac< -term)?1:0;}
+      if(lit){ctx.fillStyle="#e8e0c8";ctx.fillRect(cx+x,cy-r,1,2*r);}
+    }
+    ctx.restore();ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.strokeStyle="#3a4152";ctx.lineWidth=1.5;ctx.stroke();}
+  function drawTimeline(segs,moonUp,sunsetT,sunriseT,darkStart,darkEnd){
+    var cv=$("tl"),ctx=cv.getContext("2d"),dpr=Math.min(window.devicePixelRatio||1,2);
+    var W=Math.round(cv.clientWidth*dpr),H=Math.round(cv.clientHeight*dpr);if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
+    ctx.clearRect(0,0,W,H);
+    var t0=segs.t0,t1=segs.t1,span=t1-t0,barH=H-34*dpr,barY=6*dpr;
+    function X(t){return (t-t0)/span*W}
+    // twilight gradient by sun altitude
+    var step=Math.max(1,Math.round(W/300));
+    for(var px=0;px<W;px+=step){var t=t0+px/W*span,a=altitude(sun(jd(new Date(t))),jd(new Date(t)),settings.latitude,settings.longitude);
+      var col;
+      if(a>0)col="#2a5b9e"; else if(a>-6)col="#20406e"; else if(a>-12)col="#152744"; else if(a>-18)col="#0d1830"; else col="#060b17";
+      ctx.fillStyle=col;ctx.fillRect(px,barY,step+1,barH);}
+    // moon-up overlay (hatched top strip)
+    moonUp.forEach(function(seg){var x0=X(seg[0]),x1=X(seg[1]);
+      ctx.fillStyle="rgba(232,224,200,.18)";ctx.fillRect(x0,barY,x1-x0,10*dpr);});
+    // hour ticks
+    ctx.fillStyle="rgba(140,150,184,.6)";ctx.font=(10*dpr)+"px ui-monospace,monospace";ctx.textAlign="center";
+    var d=new Date(t0);d.setMinutes(0,0,0);
+    for(var tt=d.getTime();tt<=t1;tt+=3*3600000){if(tt<t0)continue;var x=X(tt);
+      ctx.fillStyle="rgba(140,150,184,.2)";ctx.fillRect(x,barY,1,barH);
+      ctx.fillStyle="rgba(140,150,184,.7)";ctx.fillText(new Date(tt).toLocaleTimeString([],{hour:"numeric"}),x,H-6*dpr);}
+    // markers
+    function mark(t,label,col){if(!t)return;var x=X(t.getTime());ctx.strokeStyle=col;ctx.lineWidth=2*dpr;
+      ctx.beginPath();ctx.moveTo(x,barY);ctx.lineTo(x,barY+barH);ctx.stroke();}
+    mark(sunsetT,"set","#f0a860");mark(sunriseT,"rise","#f0a860");
+    mark(darkStart,"dark","#9db4ff");mark(darkEnd,"dark","#9db4ff");
+  }
+  function render(){
+    var lat=Number(settings.latitude),lon=Number(settings.longitude);
+    $("loc").textContent=lat.toFixed(2)+", "+lon.toFixed(2);
+    var now=new Date();
+    // window: local noon today -> local noon tomorrow
+    var noon=new Date(now);noon.setHours(12,0,0,0);if(now.getHours()<12)noon.setDate(noon.getDate()-1);
+    var t0=noon.getTime(),t1=t0+24*3600000;
+    var sunsetT=findCross(sun,t0,t1,lat,lon,-0.833,-1);
+    var sunriseT=findCross(sun,sunsetT?sunsetT.getTime():t0,t1,lat,lon,-0.833,+1);
+    var duskA=findCross(sun,t0,t1,lat,lon,-18,-1);
+    var dawnA=findCross(sun,duskA?duskA.getTime():t0,t1,lat,lon,-18,+1);
+    $("sunset").textContent=hm(sunsetT);$("sunrise").textContent=hm(sunriseT);
+    $("nightlen").textContent=(sunsetT&&sunriseT)?dur(sunriseT-sunsetT):"—";
+    if(duskA&&dawnA){$("darkwin").textContent=hm(duskA)+" – "+hm(dawnA);$("darkdur").textContent=dur(dawnA-duskA)+" of true darkness for stargazing";}
+    else{$("darkwin").textContent="No astro darkness";$("darkdur").textContent="Sun stays above −18° tonight";}
+    // moon
+    var mp=moonPhase(jd(now));
+    $("moonph").textContent=mp.name;$("moonil").textContent=Math.round(mp.illum*100)+"% illuminated";
+    drawMoon($("disc"),mp.age);
+    var moonset=findCross(moon,t0,t1,lat,lon,-0.566,-1),moonrise=findCross(moon,t0,t1,lat,lon,-0.566,+1);
+    $("moonrs").textContent="Moonrise "+hm(moonrise)+"\nMoonset "+hm(moonset);
+    $("moonrs").innerHTML="Moonrise "+hm(moonrise)+"<br>Moonset "+hm(moonset);
+    // moon-up segments during window (sample)
+    var moonUp=[],inSeg=false,segStart=0;
+    for(var t=t0;t<=t1;t+=10*60000){var a=altitude(moon(jd(new Date(t))),jd(new Date(t)),lat,lon);
+      if(a>-0.566&&!inSeg){inSeg=true;segStart=t}else if(a<=-0.566&&inSeg){inSeg=false;moonUp.push([segStart,t])}}
+    if(inSeg)moonUp.push([segStart,t1]);
+    // interference: moon up during dark window AND bright?
+    var interferes=false;
+    if(duskA&&dawnA){moonUp.forEach(function(s){if(s[1]>duskA.getTime()&&s[0]<dawnA.getTime())interferes=true});}
+    var note=$("moonnote");
+    if(mp.illum<0.25||!interferes){note.className="note good";note.textContent=interferes?"Thin moon — good dark skies":"Moon down during darkness — great skies";}
+    else{note.className="note bad";note.textContent="Bright moon up during darkness — washes out faint objects";}
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+    drawTimeline({t0:t0,t1:t1},moonUp,sunsetT,sunriseT,duskA,dawnA);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);render()});
+    xemd.onRefresh(render);xemd.ready();render();setInterval(render,600000);
+    window.addEventListener("resize",render);
+  })();
+</script></body></html>

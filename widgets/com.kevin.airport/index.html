@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Airport Traffic</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0a0e12;--surface:#141b22;--border:#233240;--text:#e6eef2;--mid:#8398a8;--dim:#4d6474;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--climb:#6bd08a;--descend:#4ea1ff;--ground:#e0af68;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:18px 26px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:8px}
+  .head h1{font-size:1.25rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sp{flex:1}.head .cnt{font-family:var(--mono);font-size:.9rem;color:var(--dim)}
+  .thead,.tr{display:grid;grid-template-columns:5.5em 1fr 5.5em 4.5em 5.5em 4.5em;gap:10px;align-items:center}
+  .thead{font-family:var(--mono);font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.03em;padding:0 6px 6px;border-bottom:1px solid var(--border)}
+  #list{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+  .tr{padding:7px 6px}.tr+.tr{border-top:1px solid rgba(35,50,64,.5)}
+  .tr .cs{font-family:var(--mono);font-weight:700;font-size:1.05rem}
+  .tr .ty{color:var(--mid);font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tr .al{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600}
+  .tr .vr{font-family:var(--mono);font-weight:700}.tr .vr.up{color:var(--climb)}.tr .vr.dn{color:var(--descend)}.tr .vr.gd{color:var(--ground)}
+  .tr .sp2{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--mid)}
+  .tr .di{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--dim);text-align:right}
+  .r{text-align:right}
+  #status{position:fixed;left:26px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+  .none{flex:1;display:flex;align-items:center;justify-content:center;color:var(--dim)}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">🛬</span><span id="apt">Airport</span></h1><span class="sp"></span><span class="cnt" id="cnt"></span></div>
+    <div class="thead"><span>Flight</span><span>Type</span><span class="r">Alt ft</span><span class="r">V/S</span><span class="r">Speed</span><span class="r">Dist</span></div>
+    <div id="list"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={airport:"San Francisco (KSFO)",latitude:37.6213,longitude:-122.379,radiusNm:25};
+  var $=function(i){return document.getElementById(i)}, last=0;
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function dist(la1,lo1,la2,lo2){var R=3440.1,d2r=Math.PI/180;var dla=(la2-la1)*d2r,dlo=(lo2-lo1)*d2r;
+    var a=Math.sin(dla/2)*Math.sin(dla/2)+Math.cos(la1*d2r)*Math.cos(la2*d2r)*Math.sin(dlo/2)*Math.sin(dlo/2);return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))}
+  function render(ac){
+    var la=Number(settings.latitude),lo=Number(settings.longitude);
+    var list=ac.map(function(a){
+      var ground=a.alt_baro==="ground";
+      return {cs:(a.flight||a.hex||"").trim()||"—",ty:a.t||a.desc||"",alt:ground?null:a.alt_baro,gs:a.gs,vr:a.baro_rate,
+        d:(a.lat!=null&&a.lon!=null)?dist(la,lo,a.lat,a.lon):999,ground:ground};
+    }).sort(function(a,b){return a.d-b.d});
+    $("cnt").textContent=list.length+" aircraft · "+settings.radiusNm+" nm";
+    var el=$("list");
+    if(!list.length){el.innerHTML='<div class="none">No aircraft in range right now.</div>';}
+    else el.innerHTML=list.slice(0,9).map(function(a){
+      var vr=a.ground?'<span class="vr gd">GND</span>':(a.vr>200?'<span class="vr up">▲'+Math.round(a.vr/100)*100+'</span>':(a.vr<-200?'<span class="vr dn">▼'+Math.abs(Math.round(a.vr/100)*100)+'</span>':'<span class="vr">–</span>'));
+      return '<div class="tr"><span class="cs">'+esc(a.cs)+'</span><span class="ty">'+esc(a.ty)+'</span>'
+        +'<span class="al r">'+(a.ground?'<span style="color:var(--ground)">ground</span>':(a.alt!=null?Number(a.alt).toLocaleString():"—"))+'</span>'
+        +'<span class="r">'+vr+'</span><span class="sp2 r">'+(a.gs!=null?Math.round(a.gs)+" kt":"—")+'</span>'
+        +'<span class="di">'+a.d.toFixed(1)+' nm</span></div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<10000)return; last=Date.now();
+    try{
+      $("apt").textContent=settings.airport;
+      var url="https://api.adsb.lol/v2/point/"+Number(settings.latitude)+"/"+Number(settings.longitude)+"/"+Math.min(250,Number(settings.radiusNm)||25);
+      var res=await xemd.proxy.fetch(url,{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();render(d.ac||[]);
+      $("status").className="";$("status").textContent="adsb.lol · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="adsb: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="traffic data unavailable"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,20000);
+  })();
+</script></body></html>

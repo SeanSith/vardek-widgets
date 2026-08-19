@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Meeting Planner</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--work:#4ea1ff;--awake:#33415a;--sleep:#141926;--good:#6bd08a;--now:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:20px 28px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+  .head h1{font-size:1.25rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sp{flex:1}.head .best{font-family:var(--mono);font-size:.85rem}.head .best b{color:var(--good)}
+  .axis{display:grid;grid-template-columns:11.5em 1fr;gap:14px;margin-bottom:4px}
+  .axis .hrs{position:relative;height:14px;font-family:var(--mono);font-size:.66rem;color:var(--dim)}
+  .axis .hrs span{position:absolute;transform:translateX(-50%)}
+  #rows{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:8px}
+  .row{display:grid;grid-template-columns:11.5em 1fr;gap:14px;align-items:center}
+  .row .c{min-width:0}
+  .row .nm{font-size:1.05rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .tm{font-family:var(--mono);font-size:.82rem;color:var(--mid)}
+  .track{position:relative;height:30px;display:flex;border-radius:7px;overflow:hidden;border:1px solid var(--border)}
+  .seg{flex:1}.seg.work{background:var(--work)}.seg.awake{background:var(--awake)}.seg.sleep{background:var(--sleep)}
+  .seg.overlap{box-shadow:inset 0 0 0 99px rgba(107,208,138,.35)}
+  .nowline{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--now);z-index:2}
+  #status{position:fixed;left:28px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">🗓️</span>Meeting Planner</h1><span class="sp"></span><span class="best" id="best"></span></div>
+    <div class="axis"><div></div><div class="hrs" id="hrs"></div></div>
+    <div id="rows"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={cities:"San Francisco,America/Los_Angeles;New York,America/New_York;London,Europe/London;Berlin,Europe/Berlin;Bengaluru,Asia/Kolkata;Tokyo,Asia/Tokyo",workStart:9,workEnd:18};
+  var $=function(i){return document.getElementById(i)};
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function offH(tz){try{var d=new Date();var u=new Date(d.toLocaleString("en-US",{timeZone:"UTC"}));var l=new Date(d.toLocaleString("en-US",{timeZone:tz}));return Math.round((l-u)/3600000*10)/10}catch(e){return 0}}
+  function localTime(tz){try{return new Date().toLocaleTimeString([],{timeZone:tz,hour:"2-digit",minute:"2-digit"})}catch(e){return""}}
+  function parseCities(){return settings.cities.split(";").map(function(s){var i=s.lastIndexOf(",");return {name:s.slice(0,i).trim(),tz:s.slice(i+1).trim()}}).filter(function(c){return c.name&&c.tz}).slice(0,8)}
+  function render(){
+    var cities=parseCities();
+    var vOff=offH(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    var ws=Number(settings.workStart)||9, we=Number(settings.workEnd)||18;
+    // for each viewer-local hour 0..23, per-city local hour
+    var overlap=[];
+    for(var h=0;h<24;h++){var all=true;
+      cities.forEach(function(c){var lh=((h+(offH(c.tz)-vOff))%24+24)%24;if(!(lh>=ws&&lh<we))all=false});
+      overlap.push(all&&cities.length>0);}
+    // axis labels every 3h (viewer local)
+    var hrs="";for(var a=0;a<=24;a+=3){var lbl=(a%24);hrs+='<span style="left:'+(a/24*100)+'%">'+((lbl%12)||12)+(lbl<12?"a":"p")+'</span>'}
+    $("hrs").innerHTML=hrs;
+    var now=new Date(),nowH=now.getHours()+now.getMinutes()/60;
+    $("rows").innerHTML=cities.map(function(c){
+      var off=offH(c.tz)-vOff;
+      var segs="";for(var h=0;h<24;h++){var lh=((h+off)%24+24)%24;
+        var cls=(lh>=ws&&lh<we)?"work":((lh>=7&&lh<23)?"awake":"sleep");
+        if(overlap[h])cls+=" overlap";segs+='<div class="seg '+cls+'"></div>';}
+      return '<div class="row"><div class="c"><div class="nm">'+esc(c.name)+'</div><div class="tm">'+localTime(c.tz)+' · UTC'+(off>=0?"+":"")+(offH(c.tz))+'</div></div>'
+        +'<div class="track">'+segs+'<div class="nowline" style="left:'+(nowH/24*100)+'%"></div></div></div>';
+    }).join("");
+    // best overlap window
+    var start=-1,best="";for(var h2=0;h2<24;h2++){if(overlap[h2]&&start<0)start=h2;if((!overlap[h2]||h2===23)&&start>=0){var end=overlap[h2]?24:h2;
+      var fmt=function(x){return ((x%24)%12||12)+(x%24<12?"am":"pm")};best=fmt(start)+"–"+fmt(end)+" your time";break}}
+    $("best").innerHTML=best?("Best overlap: <b>"+best+"</b>"):"No shared working hours";
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);render()});
+    xemd.onRefresh(render);xemd.ready();render();setInterval(render,60000);
+  })();
+</script></body></html>

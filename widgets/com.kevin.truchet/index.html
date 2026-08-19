@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Truchet</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#06070c}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={palette:"neon",tile:56};
+  var PAL={neon:[190,320],sunset:[10,50],mono:[210,215],forest:[90,160],ice:[180,220]};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d"),W,H,dpr,cs,cols,rows,grid,t=0,bg="#06070c";
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;
+    cs=Math.max(24,Math.round((Number(settings.tile)||56)*dpr));cols=Math.ceil(W/cs);rows=Math.ceil(H/cs);
+    grid=[];for(var i=0;i<cols*rows;i++)grid.push(Math.random()<0.5?0:1);}
+  function hue(x,y){var p=PAL[settings.palette]||PAL.neon;var f=(x/cols+y/rows)/2;return p[0]+(p[1]-p[0])*((f+Math.sin(t*0.2)*0.2+1)%1)}
+  function tile(cx,cy,type,h){
+    var r=cs/2;ctx.lineWidth=cs*0.16;ctx.lineCap="butt";
+    ctx.strokeStyle="hsl("+(((h%360)+360)%360)+",80%,60%)";ctx.shadowColor="hsla("+(((h%360)+360)%360)+",90%,60%,.5)";ctx.shadowBlur=cs*0.10;
+    if(type===0){
+      ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI/2);ctx.stroke();
+      ctx.beginPath();ctx.arc(cx+cs,cy+cs,r,Math.PI,Math.PI*1.5);ctx.stroke();
+    }else{
+      ctx.beginPath();ctx.arc(cx+cs,cy,r,Math.PI/2,Math.PI);ctx.stroke();
+      ctx.beginPath();ctx.arc(cx,cy+cs,r,Math.PI*1.5,Math.PI*2);ctx.stroke();
+    }
+    ctx.shadowBlur=0;
+  }
+  var flipAcc=0;
+  function frame(){
+    // occasionally flip a few tiles for life
+    flipAcc+=1;if(flipAcc>=6){flipAcc=0;for(var f=0;f<Math.max(1,Math.round(cols*rows/60));f++){grid[Math.floor(Math.random()*grid.length)]^=1;}}
+    // redraw full pattern (hue drifts over time)
+    ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+    for(var gy=0;gy<rows;gy++)for(var gx=0;gx<cols;gx++){var gi=gy*cols+gx;tile(gx*cs,gy*cs,grid[gi],hue(gx,gy))}
+    t+=0.02;requestAnimationFrame(frame);
+  }
+  function full(){ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);for(var gy=0;gy<rows;gy++)for(var gx=0;gx<cols;gx++){var gi=gy*cols+gx;tile(gx*cs,gy*cs,grid[gi],hue(gx,gy))}}
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);resize();full()});
+    xemd.ready();resize();full();requestAnimationFrame(frame);window.addEventListener("resize",function(){resize();full()});
+  })();
+</script></body></html>

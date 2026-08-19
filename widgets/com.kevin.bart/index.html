@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BART Departures</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:20px 28px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+  .head h1{font-size:1.35rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sp{flex:1}.head .upd{font-family:var(--mono);font-size:.78rem;color:var(--dim)}
+  #list{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:7px}
+  .dest{display:grid;grid-template-columns:8px 1fr auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:12px 16px;overflow:hidden}
+  .dest .line{width:8px;align-self:stretch;border-radius:4px;margin:-12px 0 -12px -16px}
+  .dest .d{min-width:0}
+  .dest .nm{font-size:1.3rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dest .plat{font-family:var(--mono);font-size:.75rem;color:var(--dim)}
+  .times{display:flex;gap:10px;align-items:baseline}
+  .t{text-align:right}
+  .t .m{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:1.7rem}
+  .t.now .m{color:#9ece6a}
+  .t .c{font-family:var(--mono);font-size:.68rem;color:var(--dim)}
+  .t.next .m{font-size:1.2rem;color:var(--mid)}
+  #status{position:fixed;left:28px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">🚆</span><span id="station">BART</span></h1><span class="sp"></span><span class="upd" id="upd"></span></div>
+    <div id="list"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={station:"EMBR",apiKey:"MW9S-E7SL-26DU-VV8V"};
+  var $=function(i){return document.getElementById(i)}, last=0;
+  var COL={YELLOW:"#ffca28",ORANGE:"#ff9e42",GREEN:"#4caf50",RED:"#f44336",BLUE:"#2f7de1",PURPLE:"#9c4dcc",WHITE:"#cfd6e4"};
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function mins(m){return m==="Leaving"?0:parseInt(m,10)}
+  function render(st){
+    $("station").textContent=st.name;
+    var dests=(st.etd||[]).map(function(e){
+      var ests=(e.estimate||[]).slice().sort(function(a,b){return mins(a.minutes)-mins(b.minutes)});
+      return {dest:e.destination,ests:ests,soonest:ests.length?mins(ests[0].minutes):999};
+    }).sort(function(a,b){return a.soonest-b.soonest});
+    $("list").innerHTML=dests.slice(0,6).map(function(d){
+      var e0=d.ests[0],col=COL[(e0&&e0.color)||"WHITE"]||"#cfd6e4";
+      var times=d.ests.slice(0,3).map(function(e,i){
+        var m=mins(e.minutes),now=m<=0;
+        return '<div class="t'+(now?" now":"")+(i>0?" next":"")+'"><div class="m">'+(now?"Now":m)+(now?"":'<span style="font-size:.7rem;color:var(--dim)">m</span>')+'</div><div class="c">'+e.length+' car</div></div>';
+      }).join("");
+      return '<div class="dest"><div class="line" style="background:'+col+'"></div>'
+        +'<div class="d"><div class="nm">'+esc(d.dest)+'</div><div class="plat">Platform '+((e0&&e0.platform)||"?")+' · '+((e0&&e0.direction)||"")+'</div></div>'
+        +'<div class="times">'+times+'</div></div>';
+    }).join("");
+    if(!dests.length)$("list").innerHTML='<div style="text-align:center;color:var(--dim)">No trains scheduled right now.</div>';
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<20000)return; last=Date.now();
+    try{
+      var url="https://api.bart.gov/api/etd.aspx?cmd=etd&orig="+encodeURIComponent(settings.station)+"&key="+encodeURIComponent(settings.apiKey)+"&json=y";
+      var res=await xemd.proxy.fetch(url,{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();
+      var st=d.root&&d.root.station&&d.root.station[0];
+      if(!st)throw new Error("bad station");
+      $("upd").textContent=(d.root.time||"").replace(/ PST| PDT/,"");
+      render(st);
+      $("status").className="";$("status").textContent="BART · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="bart api: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="BART data unavailable — check station code"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,60000);
+  })();
+</script></body></html>

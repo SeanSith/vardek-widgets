@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Word of the Day</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#14110d;--card:#1c1813;--text:#efe7d8;--mid:#b3a894;--dim:#7a7060;--line:#2e2820;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#d0a068;--pos:#c9a3d9}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:Georgia,'Times New Roman',serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding:34px 54px}
+  .lbl{font-family:var(--mono);font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.12em}
+  .word{font-size:4.4rem;font-weight:700;line-height:1;margin:6px 0 4px}
+  .meta{display:flex;align-items:baseline;gap:16px;margin-bottom:18px}
+  .meta .ph{font-family:var(--mono);font-size:1.2rem;color:var(--mid)}
+  .meta .pos{font-style:italic;color:var(--pos);font-size:1.2rem}
+  .defs{display:flex;flex-direction:column;gap:12px;max-width:90ch}
+  .def .d{font-size:1.5rem;line-height:1.4}
+  .def .d .n{color:var(--accent);font-weight:700;margin-right:8px}
+  .def .ex{font-style:italic;color:var(--mid);font-size:1.15rem;margin-top:3px;padding-left:22px}
+  #status{position:fixed;left:54px;bottom:10px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">…</div>
+  <div id="wrap" style="display:none">
+    <div class="lbl">Word of the Day</div>
+    <div class="word" id="word"></div>
+    <div class="meta"><span class="ph" id="ph"></span><span class="pos" id="pos"></span></div>
+    <div class="defs" id="defs"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var $=function(i){return document.getElementById(i)};
+  var WORDS=["serendipity","ephemeral","petrichor","mellifluous","luminous","ineffable","sonder","halcyon","vellichor",
+    "eloquence","quixotic","limerence","nefarious","ebullient","susurrus","aurora","zephyr","solitude","wanderlust",
+    "epiphany","euphoria","labyrinthine","incandescent","nebulous","effervescent","clandestine","ethereal","opulent",
+    "resplendent","surreptitious","panacea","quintessential","idyllic","cascade","meridian","numinous","gossamer",
+    "apricity","dalliance","reverie","tranquil","luminescence","sanguine","verdant","cerulean","iridescent","zenith",
+    "penumbra","equinox","solstice","aphelion","syzygy","perihelion","cosmos","nadir","azimuth","celestial","stellar",
+    "eclipse","aurora","astral","lunar","radiant"];
+  function dayOfYear(){var n=new Date();return Math.floor((n-new Date(n.getFullYear(),0,0))/86400000)}
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function render(entry){
+    $("word").textContent=entry.word;
+    var ph="";(entry.phonetics||[]).forEach(function(p){if(!ph&&p.text)ph=p.text});
+    $("ph").textContent=ph||"";
+    var m=(entry.meanings||[])[0]||{};$("pos").textContent=m.partOfSpeech||"";
+    var defs=(m.definitions||[]).slice(0,3);
+    $("defs").innerHTML=defs.map(function(d,i){
+      return '<div class="def"><div class="d"><span class="n">'+(i+1)+'.</span>'+esc(d.definition)+'</div>'
+        +(d.example?'<div class="ex">"'+esc(d.example)+'"</div>':'')+'</div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    var word=WORDS[dayOfYear()%WORDS.length];
+    try{
+      var res=await xemd.proxy.fetch("https://api.dictionaryapi.dev/api/v2/entries/en/"+word,{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();if(!Array.isArray(d)||!d[0])throw new Error("no entry");
+      render(d[0]);
+      $("status").textContent="dictionaryapi.dev";
+    }catch(e){$("status").textContent="dictionary: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="word unavailable"}
+  }
+  (async function(){xemd.onRefresh(load);xemd.ready();load();setInterval(load,3600000)})();
+</script></body></html>

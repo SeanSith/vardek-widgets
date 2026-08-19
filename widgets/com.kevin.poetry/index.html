@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Poetry</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0f0d0b;--text:#eae4d8;--mid:#a89f8d;--dim:#6f6656;--accent:#c9a86a;--err:#e0736a}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:Georgia,'Times New Roman',serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;flex-direction:column;height:100vh;padding:34px 50px}
+  .head{flex:0 0 auto;margin-bottom:14px}
+  .title{font-size:2.2rem;font-weight:700;line-height:1.12;font-style:italic}
+  .author{font-size:1.1rem;color:var(--accent);margin-top:4px;letter-spacing:.02em}
+  .poem{flex:1;min-height:0;position:relative;overflow:hidden}
+  .lines{transition:opacity .6s;column-gap:60px}
+  .lines .ln{font-size:1.3rem;line-height:1.55;color:#ded7c8;white-space:pre-wrap}
+  .lines .ln.blank{height:.8em}
+  .fade{position:absolute;left:0;right:0;bottom:0;height:60px;background:linear-gradient(transparent,var(--bg));pointer-events:none}
+  .foot{flex:0 0 auto;display:flex;align-items:center;gap:14px;margin-top:12px;color:var(--dim);font-size:.82rem;font-family:ui-monospace,Menlo,monospace}
+  .dots{display:flex;gap:6px}.dots i{width:6px;height:6px;border-radius:50%;background:#3a352c;transition:background .3s,width .3s}.dots i.on{background:var(--accent);width:18px;border-radius:3px}
+  #status{margin-left:auto}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><div class="title" id="title"></div><div class="author" id="author"></div></div>
+    <div class="poem"><div class="lines" id="lines"></div><div class="fade" id="fade" style="display:none"></div></div>
+    <div class="foot"><div class="dots" id="dots"></div><span id="status"></span></div>
+  </div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={rotateSec:22};
+  var $=function(i){return document.getElementById(i)}, shown=[], idx=-1, timer=null, DOTS=6, busy=false;
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function layout(poem){
+    var lines=poem.lines||[];
+    // choose 1 or 2 columns based on length
+    var many=lines.length>18;
+    var lv=$("lines");lv.style.columnCount=many?2:1;
+    var maxLines=many?40:20;
+    var html=lines.slice(0,maxLines).map(function(l){return l.trim()===""?'<div class="ln blank"></div>':'<div class="ln">'+esc(l)+'</div>'}).join("");
+    lv.innerHTML=html;
+    $("fade").style.display=lines.length>maxLines?"block":"none";
+  }
+  async function nextPoem(){
+    if(busy)return;busy=true;
+    try{
+      var res=await xemd.proxy.fetch("https://poetrydb.org/random",{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();var p=Array.isArray(d)?d[0]:d;busy=false;
+      if(!p||!p.lines)throw new Error("bad poem");
+      shown.push(p);if(shown.length>DOTS)shown.shift();idx=shown.length-1;
+      var lv=$("lines");lv.style.opacity="0";
+      setTimeout(function(){
+        $("title").textContent=p.title;$("author").textContent="— "+p.author;
+        layout(p);lv.style.opacity="1";
+        $("dots").innerHTML=shown.map(function(_,i){return '<i class="'+(i===idx?"on":"")+'"></i>'}).join("");
+      },300);
+      $("boot").classList.add("hidden");$("wrap").style.display="flex";
+      $("status").className="";$("status").textContent="PoetryDB";
+    }catch(e){busy=false;$("status").className="err";$("status").textContent="poetry: "+(e.message||e);if(!shown.length)$("boot").textContent="poetry unavailable"}
+  }
+  function schedule(){if(timer)clearInterval(timer);timer=setInterval(nextPoem,Math.max(8,Number(settings.rotateSec)||22)*1000)}
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);schedule()});
+    xemd.onRefresh(nextPoem);xemd.ready();await nextPoem();schedule();
+  })();
+</script></body></html>

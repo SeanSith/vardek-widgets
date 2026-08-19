@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World Clocks</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --bg: #0b0e15; --surface: #161b28; --border: #2a3350; --text: #e6e9ef; --text-mid: #8089a6; --text-dim: #565f89;
+          --day: #7aa2f7; --night: #565f89; --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; }
+  #grid { display: grid; height: 100vh; gap: 12px; padding: 16px; }
+  .z { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px;
+       display: flex; flex-direction: column; justify-content: center; min-width: 0; overflow: hidden; position: relative; }
+  .z .top { display: flex; align-items: center; gap: 8px; }
+  .z .city { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .z .dn { margin-left: auto; font-size: 1.1em; }
+  .z .time { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 700; line-height: 1.05; letter-spacing: -0.01em; margin-top: 4px; }
+  .z .time .ap { font-size: .4em; color: var(--text-mid); margin-left: .25em; }
+  .z .meta { font-family: var(--mono); font-size: .8rem; color: var(--text-dim); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .z.night { color: #c8d0e6; } .z.night .city { color: #aeb8d4; }
+  .z .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--day); opacity: .5; }
+  .z.night .bar { background: var(--night); }
+  .err { grid-column: 1 / -1; color: var(--text-dim); text-align: center; align-self: center; }
+</style>
+</head>
+<body>
+  <div id="grid"></div>
+<script>
+(function () {
+  "use strict";
+  var settings = { zones: "", use24Hour: true };
+  var grid = document.getElementById("grid");
+  var zones = [], cells = [];
+
+  function parseZones() {
+    zones = (settings.zones || "").split(",").map(function (s) {
+      var parts = s.split("|"); var name = (parts[0] || "").trim(); var tz = (parts[1] || parts[0] || "").trim();
+      if (!tz) return null;
+      try { new Intl.DateTimeFormat("en", { timeZone: tz }); } catch (e) { return null; }
+      return { name: name || tz, tz: tz };
+    }).filter(Boolean).slice(0, 8);
+  }
+
+  function layoutGrid() {
+    var n = zones.length || 1;
+    var cw = grid.clientWidth, ch = grid.clientHeight;
+    var cols = ch < 200 ? n : (cw / ch >= 1.7 ? Math.min(n, n <= 4 ? n : Math.ceil(n / 2)) : (n <= 2 ? 1 : 2));
+    var rows = Math.ceil(n / cols);
+    grid.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
+    grid.style.gridTemplateRows = "repeat(" + rows + ", 1fr)";
+    return { cols: cols, rows: rows, cw: cw, ch: ch };
+  }
+
+  function build() {
+    parseZones();
+    grid.innerHTML = ""; cells = [];
+    if (!zones.length) { var e = document.createElement("div"); e.className = "err"; e.textContent = "Add cities in settings: Name|Zone, …"; grid.appendChild(e); return; }
+    zones.forEach(function (z) {
+      var cell = document.createElement("div"); cell.className = "z";
+      cell.innerHTML = '<div class="top"><span class="city"></span><span class="dn"></span></div><div class="time"></div><div class="meta"></div><div class="bar"></div>';
+      grid.appendChild(cell);
+      cells.push({ cell: cell, city: cell.querySelector(".city"), dn: cell.querySelector(".dn"),
+                   time: cell.querySelector(".time"), meta: cell.querySelector(".meta"), z: z });
+    });
+  }
+
+  function render() {
+    if (!cells.length) return;
+    var g = layoutGrid();
+    var timeSize = Math.max(20, Math.min(g.ch / g.rows * 0.42, g.cw / g.cols * 0.28));
+    var now = new Date();
+    cells.forEach(function (c) {
+      var opt = { timeZone: c.z.tz, hour: "2-digit", minute: "2-digit", hour12: settings.use24Hour === false };
+      var parts = new Intl.DateTimeFormat("en-US", opt).formatToParts(now);
+      var hh = "", mm = "", ap = "";
+      parts.forEach(function (p) { if (p.type === "hour") hh = p.value; else if (p.type === "minute") mm = p.value; else if (p.type === "dayPeriod") ap = p.value; });
+      var hourNum = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: c.z.tz, hour: "2-digit", hour12: false }).format(now), 10);
+      var night = hourNum < 6 || hourNum >= 20;
+      c.city.textContent = c.z.name;
+      c.dn.textContent = night ? "🌙" : "☀️";
+      c.time.innerHTML = hh + ":" + mm + (ap ? '<span class="ap">' + ap + "</span>" : "");
+      c.time.style.fontSize = timeSize + "px";
+      // offset from local + weekday
+      var wd = new Intl.DateTimeFormat("en-US", { timeZone: c.z.tz, weekday: "short", month: "short", day: "numeric" }).format(now);
+      var offMin = -tzOffset(now, c.z.tz);
+      var localOff = -now.getTimezoneOffset();
+      var rel = Math.round((offMin - localOff) / 60);
+      c.meta.textContent = wd + " · " + (rel === 0 ? "same as here" : (rel > 0 ? "+" : "") + rel + "h");
+      c.cell.classList.toggle("night", night);
+    });
+  }
+
+  // minutes east of UTC for a timezone at a given instant
+  function tzOffset(date, tz) {
+    var dtf = new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+    var p = {}; dtf.formatToParts(date).forEach(function (x) { p[x.type] = x.value; });
+    var asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, +(p.hour === "24" ? "0" : p.hour), +p.minute, +p.second);
+    return -Math.round((asUTC - date.getTime()) / 60000);   // minutes: UTC = local - offset
+  }
+
+  function apply() { settings = Object.assign(settings, (window.Vardek && Vardek.settings) || {}); build(); render(); }
+  document.addEventListener("vardek:ready", apply);
+  if (window.Vardek && Vardek.onResize) Vardek.onResize(render);
+  if (window.Vardek && Vardek.onSettingsChange) Vardek.onSettingsChange(function (s) { if (s) settings = Object.assign(settings, s); build(); render(); });
+  window.addEventListener("resize", render);
+  apply();
+  setInterval(render, 1000);
+})();
+</script>
+</body>
+</html>

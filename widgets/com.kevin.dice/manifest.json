@@ -1,0 +1,62 @@
+{
+  "id": "com.kevin.dice",
+  "name": "Dice Roller",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 0,
+  "permissions": {
+    "proxy": [],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    },
+    {
+      "cols": 4,
+      "rows": 1
+    },
+    {
+      "cols": 2,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "die": {
+      "type": "enum",
+      "label": "Default die",
+      "values": [
+        "4",
+        "6",
+        "8",
+        "10",
+        "12",
+        "20",
+        "100"
+      ],
+      "default": "20"
+    }
+  }
+}

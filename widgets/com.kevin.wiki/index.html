@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Wikipedia</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#7dcfff;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;flex-direction:column;height:100vh;padding:30px 40px}
+  .top{display:flex;align-items:center;gap:10px;color:var(--dim);font-size:.85rem;text-transform:uppercase;letter-spacing:.06em}
+  .top .ic{font-size:1.1rem}
+  .card{flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0}
+  .inner{transition:opacity .5s}
+  .desc{font-family:var(--mono);font-size:.85rem;color:var(--accent);text-transform:uppercase;letter-spacing:.04em}
+  .title{font-size:2.9rem;font-weight:700;line-height:1.08;margin:6px 0 14px}
+  .extract{font-size:1.35rem;line-height:1.5;color:#d4d8e4;max-width:80ch;
+    display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+  .dots{display:flex;gap:6px;margin-top:20px}
+  .dots i{width:7px;height:7px;border-radius:50%;background:var(--border);transition:background .3s,width .3s}
+  .dots i.on{background:var(--accent);width:20px;border-radius:4px}
+  #status{position:fixed;left:40px;bottom:8px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="top"><span class="ic">📖</span><span>Discover · Wikipedia</span></div>
+    <div class="card"><div class="inner" id="inner"><div class="desc" id="desc"></div><div class="title" id="title"></div><div class="extract" id="extract"></div></div>
+      <div class="dots" id="dots"></div></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={rotateSec:14};
+  var $=function(i){return document.getElementById(i)}, titles=[], shown=[], idx=-1, timer=null, DOTS=6;
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  async function fillTitles(){
+    var res=await xemd.proxy.fetch("https://en.wikipedia.org/w/api.php?action=query&list=random&rnnamespace=0&rnlimit=10&format=json&origin=*",{headers:{Accept:"application/json"}});
+    if(!res.ok)throw new Error("HTTP "+res.status);
+    var d=await res.json();titles=titles.concat((d.query.random||[]).map(function(r){return r.title}));
+  }
+  async function summary(title){
+    var res=await xemd.proxy.fetch("https://en.wikipedia.org/api/rest_v1/page/summary/"+encodeURIComponent(title.replace(/ /g,"_")),{headers:{Accept:"application/json"}});
+    if(!res.ok)throw new Error("HTTP "+res.status);
+    return await res.json();
+  }
+  async function nextArticle(){
+    try{
+      var tries=0,s=null;
+      while(tries<5){
+        if(!titles.length)await fillTitles();
+        var t=titles.shift();
+        s=await summary(t);
+        if(s&&s.extract&&s.type!=="disambiguation"&&s.extract.length>60)break;
+        s=null;tries++;
+      }
+      if(!s)return;
+      shown.push({title:s.title,desc:s.description||"",extract:s.extract});
+      if(shown.length>DOTS)shown.shift();
+      idx=shown.length-1;
+      var inner=$("inner");inner.style.opacity="0";
+      setTimeout(function(){
+        $("desc").textContent=shown[idx].desc;$("title").textContent=shown[idx].title;$("extract").textContent=shown[idx].extract;
+        inner.style.opacity="1";
+        $("dots").innerHTML=shown.map(function(_,i){return '<i class="'+(i===idx?"on":"")+'"></i>'}).join("");
+      },260);
+      $("boot").classList.add("hidden");$("wrap").style.display="flex";
+      $("status").className="";$("status").textContent="Wikipedia · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="wikipedia: "+(e.message||e);if(!shown.length)$("boot").textContent="wikipedia unavailable"}
+  }
+  function schedule(){if(timer)clearInterval(timer);timer=setInterval(nextArticle,Math.max(6,Number(settings.rotateSec)||14)*1000)}
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);schedule()});
+    xemd.onRefresh(nextArticle);xemd.ready();await nextArticle();schedule();
+  })();
+</script></body></html>

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>HF Propagation</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0a0d13;--surface:#151b26;--border:#26324a;--text:#e6e9ef;--mid:#8494ad;--dim:#556074;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--good:#6bd08a;--fair:#e0af68;--poor:#f7768e;--closed:#455066;--accent:#7dcfff}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:20px 28px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+  .head h1{font-size:1.25rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .src{color:var(--mid);font-size:.9rem}.head .sp{flex:1}.head .upd{font-family:var(--mono);font-size:.78rem;color:var(--dim)}
+  .body{flex:1;min-height:0;display:flex;gap:26px}
+  .stats{flex:0 0 42%;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:min-content;gap:10px;align-content:center}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 13px}
+  .stat .k{font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
+  .stat .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1.5rem;font-weight:700;margin-top:1px}
+  .stat .v small{font-size:.8rem;color:var(--mid);font-weight:400}
+  .bands{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+  .bands .h{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;display:grid;grid-template-columns:6em 1fr 1fr;gap:10px}
+  .brow{display:grid;grid-template-columns:6em 1fr 1fr;gap:10px;align-items:center;margin-bottom:9px}
+  .brow .nm{font-family:var(--mono);font-size:1.05rem;font-weight:700;color:var(--mid)}
+  .cell{border-radius:8px;padding:11px 0;text-align:center;font-weight:700;font-size:1.05rem;border:1px solid transparent}
+  .cell.good{background:rgba(107,208,138,.16);color:var(--good);border-color:rgba(107,208,138,.3)}
+  .cell.fair{background:rgba(224,175,104,.14);color:var(--fair);border-color:rgba(224,175,104,.28)}
+  .cell.poor{background:rgba(247,118,142,.13);color:var(--poor);border-color:rgba(247,118,142,.26)}
+  .cell.closed{background:rgba(69,80,102,.16);color:var(--closed)}
+  .vhf{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px}
+  .vhf .chip{font-size:.78rem;font-family:var(--mono);border:1px solid var(--border);border-radius:20px;padding:4px 10px;color:var(--mid)}
+  .vhf .chip.open{color:var(--good);border-color:rgba(107,208,138,.4)}
+  #status{position:fixed;left:28px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--poor)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">📡</span>HF Propagation</h1><span class="src" id="src"></span><span class="sp"></span><span class="upd" id="upd"></span></div>
+    <div class="body">
+      <div class="stats" id="stats"></div>
+      <div class="bands">
+        <div class="h"><span></span><span style="text-align:center">Day</span><span style="text-align:center">Night</span></div>
+        <div id="brows"></div>
+        <div class="vhf" id="vhf"></div>
+      </div>
+    </div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var $=function(i){return document.getElementById(i)}, last=0;
+  function cls(v){v=(v||"").toLowerCase();if(v.indexOf("good")>=0)return"good";if(v.indexOf("fair")>=0)return"fair";if(v.indexOf("poor")>=0)return"poor";return"closed"}
+  function txt(doc,tag){var e=doc.getElementsByTagName(tag)[0];return e?e.textContent.trim():""}
+  function render(doc){
+    $("src").textContent="source "+(txt(doc,"source")||"N0NBH");
+    $("upd").textContent="updated "+txt(doc,"updated");
+    var stats=[
+      ["Solar flux",txt(doc,"solarflux"),"SFI"],["Sunspots",txt(doc,"sunspots"),"SN"],
+      ["A-index",txt(doc,"aindex"),""],["K-index",txt(doc,"kindex"),""],
+      ["X-ray",txt(doc,"xray"),""],["Solar wind",txt(doc,"solarwind"),"km/s"]];
+    $("stats").innerHTML=stats.map(function(s){return '<div class="stat"><div class="k">'+s[0]+'</div><div class="v">'+(s[1]||"—")+(s[2]?' <small>'+s[2]+'</small>':'')+'</div></div>'}).join("");
+    // bands: group by name, day/night
+    var bands=doc.getElementsByTagName("band"), byName={};
+    for(var i=0;i<bands.length;i++){var b=bands[i],nm=b.getAttribute("name"),tm=b.getAttribute("time");(byName[nm]=byName[nm]||{})[tm]=b.textContent.trim()}
+    var order=["80m-40m","30m-20m","17m-15m","12m-10m"];
+    $("brows").innerHTML=order.filter(function(n){return byName[n]}).map(function(n){var d=byName[n];
+      return '<div class="brow"><div class="nm">'+n+'</div>'
+        +'<div class="cell '+cls(d.day)+'">'+(d.day||"—")+'</div>'
+        +'<div class="cell '+cls(d.night)+'">'+(d.night||"—")+'</div></div>';
+    }).join("");
+    // VHF phenomena that are open
+    var ph=doc.getElementsByTagName("phenomenon"), chips=[];
+    for(var j=0;j<ph.length;j++){var p=ph[j],v=p.textContent.trim(),open=v.toLowerCase().indexOf("closed")<0;
+      var nm=(p.getAttribute("name")||"")+" "+(p.getAttribute("location")||"").replace(/_/g," ");
+      chips.push('<span class="chip'+(open?" open":"")+'">'+nm.trim()+': '+v+'</span>');}
+    var aur=txt(doc,"aurora");
+    $("vhf").innerHTML=(aur?'<span class="chip">aurora lat '+txt(doc,"latdegree")+'° · Q'+aur+'</span>':'')+chips.slice(0,4).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var res=await xemd.proxy.fetch("https://www.hamqsl.com/solarxml.php",{headers:{Accept:"application/xml"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var t=await res.text();
+      var doc=new DOMParser().parseFromString(t,"application/xml");
+      if(doc.getElementsByTagName("parsererror").length||!doc.getElementsByTagName("solardata").length)throw new Error("bad xml");
+      render(doc);
+      $("status").className="";$("status").textContent="hamqsl.com · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="hamqsl: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="propagation data unavailable"}
+  }
+  (async function(){
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,1800000);
+  })();
+</script></body></html>

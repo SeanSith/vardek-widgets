@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lobsters</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #11151f; --surface: #161b28; --surface-2: #1b2130; --border: #2a3350;
+    --text: #e6e9ef; --text-mid: #8089a6; --text-dim: #565f89;
+    --accent: #ac130d;                 /* Lobsters crimson */
+    --accent-bright: #e2564d;
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; }
+  #wrap { display: flex; flex-direction: column; height: 100vh; padding: 18px 22px 12px; }
+
+  .head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .logo { width: 30px; height: 30px; border-radius: 6px; background: var(--accent); color: #fff; font-weight: 800;
+          font-size: 19px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .head h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; }
+  .head .feed { font-family: var(--mono); font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; color: var(--accent-bright);
+                border: 1px solid rgba(226,86,77,.4); border-radius: 6px; padding: 2px 8px; }
+  .head .sp { flex: 1; }
+  .head .upd { font-family: var(--mono); font-size: .8rem; color: var(--text-dim); }
+  body.stale .head .upd { color: #e0af68; }
+
+  #list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+          display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: min-content; gap: 4px 26px; align-content: start; }
+  #list::-webkit-scrollbar { width: 6px; } #list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .story { display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding: 8px; border-radius: 8px; cursor: pointer;
+           align-items: baseline; transition: background .1s; }
+  .story:active, .story.press { background: var(--surface); }
+  .story .score { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 1rem; color: var(--accent-bright); text-align: right; }
+  .story .body { min-width: 0; }
+  .story .title { font-size: 1.18rem; font-weight: 600; line-height: 1.25; overflow: hidden; text-overflow: ellipsis;
+                  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .story .title .dom { font-family: var(--mono); font-size: .82rem; font-weight: 500; color: var(--text-dim); margin-left: 7px; white-space: nowrap; }
+  .story .meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+  .tag { font-family: var(--mono); font-size: .72rem; padding: 1px 6px; border-radius: 4px; white-space: nowrap;
+         background: rgba(172,19,13,.14); color: #e88a84; border: 1px solid rgba(172,19,13,.3); }
+  .tag.meta { background: var(--surface-2); color: var(--text-dim); border-color: var(--border); }
+  .story .sub { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: .82rem; color: var(--text-mid); margin-left: 2px; }
+  .story .sub .cm { border-bottom: 1px solid transparent; padding-bottom: 1px; }
+  .story .sub .cm:active { border-bottom-color: var(--accent-bright); }
+  .story .sub .dim { color: var(--text-dim); }
+
+  #overlay { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+             gap: 14px; background: var(--bg); color: var(--text-dim); z-index: 5; text-align: center; padding: 30px; }
+  body.loading #overlay, body.error #overlay { display: flex; }
+  .spinner { width: 38px; height: 38px; border: 3px solid var(--border); border-top-color: var(--accent-bright); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #overlay .msg { font-size: 1rem; max-width: 520px; line-height: 1.5; }
+  body.error .spinner { display: none; }
+  body.error #overlay .msg { color: #f7768e; font-family: var(--mono); font-size: .9rem; }
+
+  @media (max-width: 1200px) { #list { grid-template-columns: 1fr; } }
+  @media (max-height: 220px) {
+    #wrap { padding: 10px 14px; } .head { margin-bottom: 8px; } .head h1 { font-size: 1.1rem; }
+    .story { padding: 6px; } .story .title { font-size: 1rem; -webkit-line-clamp: 1; } .story .meta { display: none; }
+  }
+</style>
+</head>
+<body class="loading">
+  <div id="wrap">
+    <div class="head">
+      <div class="logo">🦞</div>
+      <h1>Lobsters</h1>
+      <span class="feed" id="feed">HOTTEST</span>
+      <span class="sp"></span>
+      <span class="upd" id="upd">loading…</span>
+    </div>
+    <div id="list"></div>
+  </div>
+  <div id="overlay">
+    <div class="spinner"></div>
+    <div class="msg" id="msg">Loading stories…</div>
+  </div>
+
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+
+  var settings = { feed: "hottest", count: 14 };
+  var $ = function (id) { return document.getElementById(id); };
+  var lastLoaded = 0, lastStories = null;
+  var META_TAGS = { ask: 1, show: 1, meta: 1, announce: 1, interview: 1, rant: 1 };
+
+  var FEEDS = {
+    hottest: { label: "HOTTEST", url: "https://lobste.rs/hottest.json" },
+    newest:  { label: "NEWEST",  url: "https://lobste.rs/newest.json" }
+  };
+
+  function domainOf(url) {
+    if (!url) return "";
+    try { return new URL(url).hostname.replace(/^www\./, ""); } catch (e) { return ""; }
+  }
+  function ago(iso) {
+    var t = Date.parse(iso); if (isNaN(t)) return "";
+    var s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+    if (s < 3600) return Math.floor(s / 60) + "m";
+    if (s < 86400) return Math.floor(s / 3600) + "h";
+    return Math.floor(s / 86400) + "d";
+  }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  function render(stories) {
+    var list = $("list"); list.textContent = "";
+    var n = Math.max(1, Math.min(25, Number(settings.count) || 14));
+    stories.slice(0, n).forEach(function (s) {
+      var commentsUrl = s.comments_url || ("https://lobste.rs/s/" + s.short_id);
+      var target = s.url || commentsUrl;
+      var row = el("div", "story");
+      row.appendChild(el("div", "score", String(s.score != null ? s.score : 0)));
+      var body = el("div", "body");
+      var title = el("div", "title");
+      title.appendChild(document.createTextNode(s.title || "(untitled)"));
+      var dom = domainOf(s.url);
+      if (dom) title.appendChild(el("span", "dom", dom));
+      body.appendChild(title);
+      var meta = el("div", "meta");
+      (s.tags || []).slice(0, 4).forEach(function (tg) {
+        meta.appendChild(el("span", META_TAGS[tg] ? "tag meta" : "tag", tg));
+      });
+      var sub = el("span", "sub");
+      var user = (s.submitter_user && typeof s.submitter_user === "object") ? s.submitter_user.username : s.submitter_user;
+      var cm = el("span", "cm", (s.comment_count || 0) + " comments");
+      cm.addEventListener("click", function (e) { e.stopPropagation(); open(commentsUrl, cm); });
+      sub.appendChild(cm);
+      sub.appendChild(el("span", "dim", "  ·  " + ago(s.created_at) + "  ·  " + (user || "")));
+      meta.appendChild(sub);
+      body.appendChild(meta);
+      row.appendChild(body);
+      row.addEventListener("click", function () { open(target, row); });
+      list.appendChild(row);
+    });
+  }
+
+  function open(url, node) {
+    if (node) { node.classList.add("press"); setTimeout(function () { node.classList.remove("press"); }, 150); }
+    try { xemd.openLink(url); } catch (e) {}
+  }
+
+  async function load() {
+    if (Date.now() - lastLoaded < 3000) return;
+    lastLoaded = Date.now();
+    var feed = FEEDS[settings.feed] || FEEDS.hottest;
+    $("feed").textContent = feed.label;
+    try {
+      var res = await xemd.proxy.fetch(feed.url, { headers: { "Accept": "application/json" } });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      var data = await res.json();
+      if (!Array.isArray(data) || !data.length) throw new Error("no stories returned");
+      lastStories = data;
+      render(data);
+      document.body.classList.remove("loading", "error", "stale");
+      $("upd").textContent = "updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch (e) {
+      if (lastStories) {
+        document.body.classList.add("stale"); document.body.classList.remove("loading", "error");
+        $("upd").textContent = "offline · " + (e.message || "fetch failed");
+      } else {
+        document.body.classList.remove("loading"); document.body.classList.add("error");
+        $("msg").textContent = "Couldn't load Lobsters: " + (e.message || e) +
+          "  —  the widget fetches lobste.rs through Vardek's proxy.";
+      }
+    }
+  }
+
+  (async function () {
+    try {
+      var s = await Promise.race([xemd.settings.get(), new Promise(function (r) { setTimeout(function () { r(null); }, 1500); })]);
+      if (s && typeof s === "object") settings = Object.assign(settings, s);
+    } catch (e) {}
+    xemd.onSettingsChange(function (s) { if (s && typeof s === "object") { settings = Object.assign(settings, s); if (lastStories) render(lastStories); lastLoaded = 0; load(); } });
+    xemd.onRefresh(function () { lastLoaded = 0; load(); });
+    xemd.ready();
+    load();
+    setInterval(load, 300000);
+  })();
+</script>
+</body>
+</html>

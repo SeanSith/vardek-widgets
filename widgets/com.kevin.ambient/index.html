@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ambient</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #05060a; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+<script>
+(function () {
+  "use strict";
+  var canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
+  var settings = { mode: "matrix", palette: "green", speed: 100 };
+  var W = 0, H = 0, dpr = 1;
+  var PAL = {
+    green:    { fg: [80, 240, 120], dim: [30, 90, 50], bg: "#020604" },
+    tokyo:    { fg: [122, 162, 247], dim: [60, 70, 130], bg: "#0b0e15" },
+    amber:    { fg: [240, 180, 70], dim: [120, 80, 20], bg: "#0a0803" },
+    ice:      { fg: [130, 220, 255], dim: [40, 90, 120], bg: "#04080c" },
+    mono:     { fg: [220, 226, 240], dim: [70, 78, 96], bg: "#0a0c10" }
+  };
+  function pal() { return PAL[settings.palette] || PAL.green; }
+  function rgb(c, a) { return "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + (a == null ? 1 : a) + ")"; }
+  function spd() { return (Number(settings.speed) || 100) / 100; }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.max(1, Math.round(canvas.clientWidth * dpr)), h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; W = w; H = h; init(); }
+  }
+
+  // ── matrix rain ─────────────────────────────────────────────────────
+  var cols, drops, fontSize, chars = "アカサタナハマヤラワ0123456789ABCDEFﾊﾋﾌﾍﾎ<>*+=";
+  function initMatrix() {
+    fontSize = Math.max(12, W / 90); cols = Math.floor(W / fontSize); drops = [];
+    for (var i = 0; i < cols; i++) drops[i] = Math.random() * -H;
+  }
+  function drawMatrix() {
+    ctx.fillStyle = "rgba(2,6,4,0.10)"; ctx.fillRect(0, 0, W, H);
+    ctx.font = fontSize + "px ui-monospace, monospace"; var p = pal();
+    for (var i = 0; i < cols; i++) {
+      var ch = chars[Math.floor(Math.random() * chars.length)];
+      var x = i * fontSize, y = drops[i];
+      ctx.fillStyle = rgb([220, 255, 230], 0.9); ctx.fillText(ch, x, y);              // bright head
+      ctx.fillStyle = rgb(p.fg, 0.5); ctx.fillText(chars[Math.floor(Math.random() * chars.length)], x, y - fontSize);
+      drops[i] += fontSize * spd() * (0.6 + Math.random() * 0.3);
+      if (drops[i] > H && Math.random() > 0.975) drops[i] = Math.random() * -60;
+    }
+  }
+
+  // ── game of life ────────────────────────────────────────────────────
+  var gw, gh, cell, grid, ng, lifeAcc = 0;
+  function initLife() {
+    cell = Math.max(8, Math.round(W / 120)); gw = Math.ceil(W / cell); gh = Math.ceil(H / cell);
+    grid = new Uint8Array(gw * gh); ng = new Uint8Array(gw * gh);
+    for (var i = 0; i < grid.length; i++) grid[i] = Math.random() < 0.28 ? 1 : 0;
+    lifeAcc = 0;
+  }
+  function stepLife() {
+    for (var y = 0; y < gh; y++) for (var x = 0; x < gw; x++) {
+      var n = 0;
+      for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        var nx = (x + dx + gw) % gw, nyy = (y + dy + gh) % gh;
+        n += grid[nyy * gw + nx];
+      }
+      var i = y * gw + x, a = grid[i];
+      ng[i] = (a && (n === 2 || n === 3)) || (!a && n === 3) ? 1 : 0;
+    }
+    var tmp = grid; grid = ng; ng = tmp;
+  }
+  function drawLife(dt) {
+    var p = pal();
+    lifeAcc += dt * spd();
+    if (lifeAcc > 0.12) { stepLife(); lifeAcc = 0; }
+    ctx.fillStyle = p.bg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = rgb(p.fg, 0.9);
+    for (var y = 0; y < gh; y++) for (var x = 0; x < gw; x++) {
+      if (grid[y * gw + x]) { ctx.fillRect(x * cell + 1, y * cell + 1, cell - 2, cell - 2); }
+    }
+  }
+
+  // ── particles (gravity swarm to soft attractor) ─────────────────────
+  var parts, ax, ay, at;
+  function initParts() {
+    parts = []; var n = Math.min(360, Math.round(W * H / 9000 / dpr));
+    for (var i = 0; i < n; i++) parts.push({ x: Math.random() * W, y: Math.random() * H, vx: 0, vy: 0 });
+    ax = W / 2; ay = H / 2; at = 0;
+  }
+  function drawParts(dt) {
+    var p = pal();
+    ctx.fillStyle = "rgba(5,6,10,0.18)"; ctx.fillRect(0, 0, W, H);
+    at += dt * 0.4 * spd();
+    ax = W * (0.5 + 0.35 * Math.sin(at * 0.7)); ay = H * (0.5 + 0.35 * Math.cos(at));
+    for (var i = 0; i < parts.length; i++) {
+      var q = parts[i], dx = ax - q.x, dy = ay - q.y, d = Math.max(20, Math.hypot(dx, dy));
+      q.vx += dx / d / d * 900 * spd(); q.vy += dy / d / d * 900 * spd();
+      q.vx *= 0.965; q.vy *= 0.965; q.x += q.vx; q.y += q.vy;
+      var sp = Math.min(1, Math.hypot(q.vx, q.vy) / 6);
+      ctx.fillStyle = rgb([p.fg[0] + (255 - p.fg[0]) * sp, p.fg[1] + (255 - p.fg[1]) * sp, p.fg[2] + (255 - p.fg[2]) * sp], 0.8);
+      ctx.fillRect(q.x, q.y, 2 * dpr, 2 * dpr);
+    }
+  }
+
+  // ── starfield warp ──────────────────────────────────────────────────
+  var stars;
+  function initStars() { stars = []; for (var i = 0; i < 400; i++) stars.push(resetStar({})); }
+  function resetStar(s) { s.x = (Math.random() - 0.5) * W; s.y = (Math.random() - 0.5) * H; s.z = Math.random() * W; return s; }
+  function drawStars(dt) {
+    var p = pal();
+    ctx.fillStyle = "rgba(5,6,10,0.35)"; ctx.fillRect(0, 0, W, H);
+    var cxp = W / 2, cyp = H / 2;
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i]; s.z -= dt * 220 * spd() * dpr; if (s.z <= 1) resetStar(s);
+      var k = 128 / s.z, x = cxp + s.x * k, y = cyp + s.y * k;
+      if (x < 0 || x >= W || y < 0 || y >= H) continue;
+      var sz = (1 - s.z / W) * 3 * dpr;
+      ctx.fillStyle = rgb(p.fg, 0.4 + (1 - s.z / W) * 0.6); ctx.fillRect(x, y, sz, sz);
+    }
+  }
+
+  function init() {
+    var m = settings.mode;
+    if (m === "life") initLife(); else if (m === "particles") initParts();
+    else if (m === "starfield") initStars(); else initMatrix();
+    ctx.fillStyle = pal().bg || "#05060a"; ctx.fillRect(0, 0, W, H);
+  }
+
+  var last = null, curMode = null;
+  function frame(now) {
+    var dt = last == null ? 0 : Math.min(0.05, (now - last) / 1000); last = now;
+    resize();
+    if (curMode !== settings.mode) { curMode = settings.mode; init(); }
+    var m = settings.mode;
+    if (m === "life") drawLife(dt); else if (m === "particles") drawParts(dt);
+    else if (m === "starfield") drawStars(dt); else drawMatrix();
+    requestAnimationFrame(frame);
+  }
+
+  function apply() { settings = Object.assign(settings, (window.Vardek && Vardek.settings) || {}); curMode = null; }
+  document.addEventListener("vardek:ready", apply);
+  window.addEventListener("resize", resize);
+  apply(); resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

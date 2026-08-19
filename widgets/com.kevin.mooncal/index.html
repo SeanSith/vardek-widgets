@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Moon Calendar</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#080a12;--surface:#141826;--border:#242c40;--text:#e8ecf7;--mid:#8792ad;--dim:#525d76;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--moon:#e8e0c8;--accent:#9db4ff}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;padding:26px 32px;gap:36px;align-items:center}
+  .now{flex:0 0 40%;min-width:0;display:flex;flex-direction:column;align-items:center;text-align:center;border-right:1px solid var(--border);padding-right:32px}
+  .now canvas{width:150px;height:150px}
+  .now .ph{font-size:1.7rem;font-weight:700;margin-top:10px}
+  .now .il{color:var(--mid);font-size:1.05rem;margin-top:2px}
+  .now .age{font-family:var(--mono);color:var(--dim);font-size:.85rem;margin-top:6px}
+  .up{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+  .up .h{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+  .p{display:grid;grid-template-columns:2em 1fr auto;gap:14px;align-items:center;padding:8px 2px}
+  .p+.p{border-top:1px solid rgba(36,44,64,.6)}
+  .p .g{font-size:1.5rem;text-align:center}
+  .p .nm{font-weight:600;font-size:1.05rem}.p .dt{font-family:var(--mono);font-size:.8rem;color:var(--dim)}
+  .p .in{font-family:var(--mono);color:var(--accent);font-size:.95rem;white-space:nowrap}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">…</div>
+  <div id="wrap" style="display:none">
+    <div class="now"><canvas id="disc" width="150" height="150"></canvas><div class="ph" id="phase"></div><div class="il" id="illum"></div><div class="age" id="age"></div></div>
+    <div class="up"><div class="h">Upcoming phases</div><div id="list"></div></div>
+  </div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var $=function(i){return document.getElementById(i)}, D2R=Math.PI/180, SYN=29.530588853;
+  function phaseJDE(k){
+    var T=k/1236.85,JDE=2451550.09766+29.530588861*k+0.00015437*T*T-0.000000150*T*T*T+0.00000000073*T*T*T*T;
+    var E=1-0.002516*T-0.0000074*T*T;
+    var M=(2.5534+29.10535670*k-0.0000014*T*T-0.00000011*T*T*T)*D2R;
+    var Mp=(201.5643+385.81693528*k+0.0107582*T*T+0.00001238*T*T*T-0.000000058*T*T*T*T)*D2R;
+    var F=(160.7108+390.67050284*k-0.0016118*T*T-0.00000227*T*T*T+0.000000011*T*T*T*T)*D2R;
+    var O=(124.7746-1.56375588*k+0.0020672*T*T+0.00000215*T*T*T)*D2R;
+    var q=k-Math.floor(k),s=Math.sin,corr=0;
+    if(q<1e-6||Math.abs(q-0.5)<1e-6){var nm=q<1e-6;
+      corr=(nm?-0.40720:-0.40614)*s(Mp)+0.17241*E*s(M)+0.01608*s(2*Mp)+0.01039*s(2*F)+0.00739*E*s(Mp-M)
+        -0.00514*E*s(Mp+M)+0.00208*E*E*s(2*M)-0.00111*s(Mp-2*F)-0.00057*s(Mp+2*F)+0.00056*E*s(2*Mp+M)
+        -0.00042*s(3*Mp)+0.00042*E*s(M+2*F)+0.00038*E*s(M-2*F)-0.00024*E*s(2*Mp-M)-0.00017*s(O);
+    }else{
+      corr=-0.62801*s(Mp)+0.17172*E*s(M)-0.01183*E*s(Mp+M)+0.00862*s(2*Mp)+0.00804*s(2*F)+0.00454*E*s(Mp-M)
+        +0.00204*E*E*s(2*M)-0.00180*s(Mp-2*F)-0.00070*s(Mp+2*F)-0.00040*s(3*Mp)-0.00034*E*s(2*Mp-M)
+        +0.00032*E*s(M+2*F)+0.00032*E*s(M-2*F)-0.00028*E*E*s(Mp+2*M)+0.00027*E*s(2*Mp+M)-0.00017*s(O);
+      var W=0.00306-0.00038*E*Math.cos(M)+0.00026*Math.cos(Mp)-0.00002*Math.cos(Mp-M)+0.00002*Math.cos(Mp+M)+0.00002*Math.cos(2*F);
+      corr+=(Math.abs(q-0.25)<1e-6)?W:-W;}
+    return JDE+corr;}
+  function jdeToMs(j){return (j-2440587.5)*86400000}
+  var NAMES={0:["New Moon","🌑"],0.25:["First Quarter","🌓"],0.5:["Full Moon","🌕"],0.75:["Last Quarter","🌗"]};
+  function drawMoon(cv,ill,waxing){var ctx=cv.getContext("2d"),W=cv.width,H=cv.height,r=W/2-8,cx=W/2,cy=H/2;
+    ctx.clearRect(0,0,W,H);ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.fillStyle="#2a2f3a";ctx.fill();
+    ctx.save();ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.clip();
+    var term=(ill-0.5)*2; // -1..1
+    for(var x=-r;x<=r;x++){var f=x/r,lit;
+      if(waxing)lit=(f>-term*1);else lit=(f<term*1);
+      // simpler: lit fraction from right (waxing) using illum
+      lit = waxing ? (f > (1-2*ill)) : (f < (2*ill-1));
+      if(lit){ctx.fillStyle="#e8e0c8";ctx.fillRect(cx+x,cy-r,1,2*r)}}
+    ctx.restore();ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.strokeStyle="#3a4152";ctx.lineWidth=1.5;ctx.stroke();}
+  function render(){
+    var now=Date.now(),nowJ=now/86400000+2440587.5;
+    var kApprox=(new Date().getFullYear()+ (new Date().getMonth())/12 -2000)*12.3685, base=Math.round(kApprox);
+    var phases=[];
+    for(var kb=base-2;kb<=base+4;kb++)for(var qi=0;qi<4;qi++){var q=qi*0.25,ms=jdeToMs(phaseJDE(kb+q));
+      phases.push({q:q,ms:ms})}
+    phases.sort(function(a,b){return a.ms-b.ms});
+    // current: last new moon before now
+    var lastNew=null;for(var i=0;i<phases.length;i++){if(phases[i].q===0&&phases[i].ms<=now)lastNew=phases[i].ms}
+    var age=lastNew?((now-lastNew)/86400000):0;
+    var ill=(1-Math.cos(age/SYN*2*Math.PI))/2, waxing=age<SYN/2;
+    var nm; if(ill>=0.985)nm="Full Moon";else if(ill<=0.02)nm="New Moon";
+      else if(ill<0.46)nm=waxing?"Waxing Crescent":"Waning Crescent";
+      else if(ill<0.54)nm=waxing?"First Quarter":"Last Quarter";else nm=waxing?"Waxing Gibbous":"Waning Gibbous";
+    $("phase").textContent=nm;$("illum").textContent=Math.round(ill*100)+"% illuminated";
+    $("age").textContent="Moon age "+age.toFixed(1)+" days";
+    drawMoon($("disc"),ill,waxing);
+    var up=phases.filter(function(p){return p.ms>now}).slice(0,7);
+    $("list").innerHTML=up.map(function(p){var d=new Date(p.ms),days=(p.ms-now)/86400000,info=NAMES[p.q];
+      var inStr=days<1?"in "+Math.round(days*24)+"h":"in "+Math.round(days)+" days";
+      return '<div class="p"><div class="g">'+info[1]+'</div><div><div class="nm">'+info[0]+'</div><div class="dt">'+d.toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"})+" · "+d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})+'</div></div><div class="in">'+inStr+'</div></div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  (async function(){xemd.onRefresh(render);xemd.ready();render();setInterval(render,3600000)})();
+</script></body></html>

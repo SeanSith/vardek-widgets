@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Star Chart</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#03040a;color:#cfd6ef;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
+  #c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #hud{position:absolute;left:22px;top:18px;pointer-events:none}
+  #hud .t{font-size:1.1rem;font-weight:700}#hud .d{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;color:#6b76a8;margin-top:2px}
+</style></head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hud"><div class="t">Tonight's Sky</div><div class="d" id="sub"></div></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={latitude:37.7749,longitude:-122.4194};
+  var $=function(i){return document.getElementById(i)}, D2R=Math.PI/180, R2D=180/Math.PI;
+  // name:[RA deg, Dec deg, mag]
+  var S={
+    Betelgeuse:[88.79,7.41,0.5],Rigel:[78.63,-8.20,0.18],Bellatrix:[81.28,6.35,1.64],Saiph:[86.94,-9.67,2.07],
+    Alnitak:[85.19,-1.94,1.77],Alnilam:[84.05,-1.20,1.69],Mintaka:[83.00,-0.30,2.23],
+    Sirius:[101.29,-16.72,-1.46],Procyon:[114.83,5.22,0.34],Aldebaran:[68.98,16.51,0.85],Elnath:[81.57,28.61,1.65],
+    Capella:[79.17,45.99,0.08],Pollux:[116.33,28.03,1.14],Castor:[113.65,31.89,1.58],
+    Regulus:[152.09,11.97,1.35],Denebola:[177.26,14.57,2.14],Algieba:[154.99,19.84,2.28],
+    Dubhe:[165.93,61.75,1.79],Merak:[165.46,56.38,2.37],Phecda:[178.46,53.69,2.44],Megrez:[183.86,57.03,3.31],
+    Alioth:[193.51,55.96,1.77],Mizar:[200.98,54.93,2.23],Alkaid:[206.89,49.31,1.86],
+    Arcturus:[213.92,19.18,-0.05],Spica:[201.30,-11.16,0.98],Vega:[279.23,38.78,0.03],
+    Deneb:[310.36,45.28,1.25],Sadr:[305.56,40.26,2.23],Albireo:[292.68,27.96,3.18],Altair:[297.70,8.87,0.76],
+    Antares:[247.35,-26.43,1.06],Shaula:[263.40,-37.10,1.62],
+    Schedar:[10.13,56.54,2.24],Caph:[2.29,59.15,2.28],GammaCas:[14.18,60.72,2.47],Ruchbah:[21.45,60.24,2.68],Segin:[28.60,63.67,3.35],
+    Acrux:[186.65,-63.10,0.77],Mimosa:[191.93,-59.69,1.25],Gacrux:[187.79,-57.11,1.63],
+    RigilKent:[219.90,-60.83,-0.27],Hadar:[210.96,-60.37,0.61],
+    Mirfak:[51.08,49.86,1.79],Algol:[47.04,40.96,2.09],Alpheratz:[2.10,29.09,2.06],Mirach:[17.43,35.62,2.06],
+    Markab:[346.19,15.21,2.49],Scheat:[345.94,28.08,2.44],Algenib:[3.31,15.18,2.83],
+    Canopus:[95.99,-52.70,-0.74],Achernar:[24.43,-57.24,0.46],Polaris:[37.95,89.26,1.98],Kochab:[222.68,74.16,2.07],Fomalhaut:[344.41,-29.62,1.16]};
+  var LINES=[
+    ["Betelgeuse","Bellatrix"],["Bellatrix","Mintaka"],["Betelgeuse","Alnitak"],["Mintaka","Alnilam"],["Alnilam","Alnitak"],
+    ["Mintaka","Rigel"],["Alnitak","Saiph"],["Rigel","Saiph"],
+    ["Dubhe","Merak"],["Merak","Phecda"],["Phecda","Megrez"],["Megrez","Dubhe"],["Megrez","Alioth"],["Alioth","Mizar"],["Mizar","Alkaid"],
+    ["Caph","Schedar"],["Schedar","GammaCas"],["GammaCas","Ruchbah"],["Ruchbah","Segin"],
+    ["Vega","Deneb"],["Deneb","Sadr"],["Sadr","Albireo"],["Sadr","Altair"],
+    ["Regulus","Algieba"],["Algieba","Denebola"],
+    ["Acrux","Gacrux"],["Mimosa","Acrux"],
+    ["Pollux","Castor"],["Alpheratz","Mirach"],["Alpheratz","Markab"],["Markab","Scheat"],["Scheat","Algenib"],["Algenib","Alpheratz"],
+    ["Antares","Shaula"]];
+  var cv=$("c"),ctx=cv.getContext("2d"),W,H,dpr;
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H}
+  function jd(d){return d.getTime()/86400000+2440587.5}
+  function gmst(J){var g=(280.46061837+360.98564736629*(J-2451545.0))%360;return g<0?g+360:g}
+  function altaz(ra,dec,lst,lat){var H=(lst-ra)*D2R,la=lat*D2R,de=dec*D2R;
+    var alt=Math.asin(Math.sin(la)*Math.sin(de)+Math.cos(la)*Math.cos(de)*Math.cos(H));
+    var az=Math.atan2(-Math.cos(de)*Math.sin(H),Math.sin(de)*Math.cos(la)-Math.cos(de)*Math.sin(la)*Math.cos(H));
+    return [alt*R2D,(az*R2D+360)%360];}
+  function draw(){
+    resize();ctx.fillStyle="#03040a";ctx.fillRect(0,0,W,H);
+    var cx=W/2,cy=H/2,R=Math.min(W,H)/2-16*dpr;
+    var lat=Number(settings.latitude),lon=Number(settings.longitude);
+    var now=new Date(),lst=(gmst(jd(now))+lon+360)%360;
+    // horizon circle + cardinal
+    ctx.strokeStyle="rgba(90,110,180,.35)";ctx.lineWidth=1.5*dpr;ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.stroke();
+    ctx.strokeStyle="rgba(90,110,180,.12)";ctx.beginPath();ctx.arc(cx,cy,R*2/3,0,7);ctx.moveTo(cx+R/3,cy);ctx.arc(cx,cy,R/3,0,7);ctx.stroke();
+    ctx.fillStyle="rgba(140,160,220,.7)";ctx.font=(13*dpr)+"px -apple-system,sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText("N",cx,cy-R-2*dpr);ctx.fillText("S",cx,cy+R+2*dpr);ctx.fillText("E",cx-R-2*dpr,cy);ctx.fillText("W",cx+R+2*dpr,cy);
+    function proj(alt,az){var r=(90-alt)/90*R,a=az*D2R;return [cx-r*Math.sin(a),cy-r*Math.cos(a)]}
+    var pos={};for(var nm in S){var aa=altaz(S[nm][0],S[nm][1],lst,lat);pos[nm]={alt:aa[0],p:proj(aa[0],aa[1])}}
+    // constellation lines (both endpoints above horizon)
+    ctx.strokeStyle="rgba(120,150,230,.30)";ctx.lineWidth=1.2*dpr;
+    LINES.forEach(function(l){var a=pos[l[0]],b=pos[l[1]];if(a&&b&&a.alt>0&&b.alt>0){ctx.beginPath();ctx.moveTo(a.p[0],a.p[1]);ctx.lineTo(b.p[0],b.p[1]);ctx.stroke()}});
+    // stars
+    var vis=0;
+    for(var nm2 in S){var st=pos[nm2];if(st.alt<=0)continue;vis++;var mag=S[nm2][2];
+      var rad=Math.max(1,(3.2-mag*0.8))*dpr;
+      ctx.beginPath();ctx.arc(st.p[0],st.p[1],rad,0,7);ctx.fillStyle="#eef2ff";ctx.shadowColor="rgba(200,220,255,.9)";ctx.shadowBlur=6*dpr;ctx.fill();ctx.shadowBlur=0;
+      if(mag<1.0){ctx.fillStyle="rgba(180,200,255,.75)";ctx.font=(11*dpr)+"px -apple-system,sans-serif";ctx.textAlign="left";ctx.textBaseline="alphabetic";ctx.fillText(nm2,st.p[0]+rad+3*dpr,st.p[1]-3*dpr)}
+    }
+    $("sub").textContent=lat.toFixed(1)+", "+lon.toFixed(1)+" · "+now.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})+" · "+vis+" bright stars up";
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);draw()});
+    xemd.onRefresh(draw);xemd.ready();draw();setInterval(draw,60000);window.addEventListener("resize",draw);
+  })();
+</script></body></html>

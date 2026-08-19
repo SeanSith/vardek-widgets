@@ -1,0 +1,43 @@
+{
+  "id": "com.kevin.statusboard",
+  "name": "Status Board",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 120,
+  "permissions": {
+    "proxy": [
+      "https://**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "services": {
+      "type": "string",
+      "label": "Services (Name|statuspage-host, comma-separated)",
+      "default": "OpenAI|status.openai.com, GitHub|www.githubstatus.com, Vercel|www.vercel-status.com, Cloudflare|www.cloudflarestatus.com, npm|status.npmjs.org, Discord|discordstatus.com"
+    }
+  }
+}

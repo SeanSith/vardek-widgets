@@ -1,0 +1,53 @@
+{
+  "id": "com.kevin.ghtrending",
+  "name": "GitHub Trending",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 900,
+  "permissions": {
+    "proxy": [
+      "https://api.github.com/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "sinceDays": {
+      "type": "number",
+      "label": "New in last N days",
+      "default": 7
+    },
+    "language": {
+      "type": "string",
+      "label": "Language filter (blank = any)",
+      "default": ""
+    },
+    "count": {
+      "type": "number",
+      "label": "Repos to show (max 20)",
+      "default": 12
+    }
+  }
+}

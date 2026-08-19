@@ -1,0 +1,78 @@
+{
+  "id": "com.kevin.flowfield",
+  "name": "Flow Field",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 0,
+  "permissions": {
+    "proxy": [],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    },
+    {
+      "cols": 6,
+      "rows": 1
+    },
+    {
+      "cols": 4,
+      "rows": 1
+    },
+    {
+      "cols": 3,
+      "rows": 1
+    },
+    {
+      "cols": 2,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "palette": {
+      "type": "enum",
+      "label": "Palette",
+      "values": [
+        "aurora",
+        "ember",
+        "ocean",
+        "neon",
+        "mono"
+      ],
+      "default": "aurora"
+    },
+    "speed": {
+      "type": "number",
+      "label": "Speed",
+      "default": 1.4
+    },
+    "density": {
+      "type": "number",
+      "label": "Particle density",
+      "default": 1
+    }
+  }
+}

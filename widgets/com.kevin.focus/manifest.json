@@ -1,0 +1,58 @@
+{
+  "id": "com.kevin.focus",
+  "name": "Focus Timer",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    },
+    {
+      "cols": 4,
+      "rows": 1
+    },
+    {
+      "cols": 2,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "workMinutes": {
+      "type": "number",
+      "label": "Focus minutes",
+      "default": 25
+    },
+    "breakMinutes": {
+      "type": "number",
+      "label": "Break minutes",
+      "default": 5
+    },
+    "longBreak": {
+      "type": "number",
+      "label": "Long break minutes (every 4)",
+      "default": 15
+    }
+  }
+}

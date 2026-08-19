@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Julia Set</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#000}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={palette:"electric"};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d");
+  var off=document.createElement("canvas"),octx=off.getContext("2d"),img;
+  var W,H,dpr,fw,fh,t=0;
+  function hsl(h,s,l){h=((h%360)+360)%360;s/=100;l/=100;var c=(1-Math.abs(2*l-1))*s,x=c*(1-Math.abs((h/60)%2-1)),m=l-c/2,r,g,b;
+    if(h<60){r=c;g=x;b=0}else if(h<120){r=x;g=c;b=0}else if(h<180){r=0;g=c;b=x}else if(h<240){r=0;g=x;b=c}else if(h<300){r=x;g=0;b=c}else{r=c;g=0;b=x}
+    return [(r+m)*255,(g+m)*255,(b+m)*255]}
+  var PAL={electric:function(sm,h){return hsl(200+sm*8+h,85,55)},ember:function(sm,h){return hsl(12+sm*8+h,88,53)},
+    forest:function(sm,h){return hsl(95+sm*8+h,70,50)},candy:function(sm,h){return hsl(sm*14+h,85,60)},mono:function(sm,h){return hsl(210,10,28+((sm*12)%62))}};
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;
+    fw=Math.min(240,Math.round(cv.clientWidth/6));fh=Math.round(fw*H/W);off.width=fw;off.height=fh;img=octx.createImageData(fw,fh)}
+  function frame(){
+    var pal=PAL[settings.palette]||PAL.electric,d=img.data,asp=fw/fh;
+    var cr=0.7885*Math.cos(t),ci=0.7885*Math.sin(t),maxIter=110,hshift=t*20;
+    var span=3.0,xmin=-span/2,ymin=-span/(2*asp),dx=span/fw,dy=span/(asp*fh);
+    for(var py=0;py<fh;py++){var zy0=ymin+py*dy;for(var px=0;px<fw;px++){var zx=xmin+px*dx,zy=zy0,it=0,x2=zx*zx,y2=zy*zy;
+      while(x2+y2<=4&&it<maxIter){zy=2*zx*zy+ci;zx=x2-y2+cr;x2=zx*zx;y2=zy*zy;it++}
+      var o=(py*fw+px)*4;
+      if(it>=maxIter){d[o]=d[o+1]=d[o+2]=0;d[o+3]=255}
+      else{var sm=it+1-Math.log(Math.log(Math.sqrt(x2+y2)))/Math.log(2);var c=pal(sm,hshift);d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=255}}}
+    octx.putImageData(img,0,0);ctx.imageSmoothingEnabled=true;ctx.drawImage(off,0,0,fw,fh,0,0,W,H);
+    t+=0.004;requestAnimationFrame(frame);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s)});
+    xemd.ready();resize();requestAnimationFrame(frame);window.addEventListener("resize",resize);
+  })();
+</script></body></html>

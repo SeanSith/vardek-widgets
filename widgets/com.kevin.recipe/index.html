@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Recipe</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#130f0b;--surface:#211a12;--border:#3a2f1f;--text:#f4ead9;--mid:#b8a482;--dim:#7d6b4e;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#e0a458;--herb:#8fbf6a}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;padding:26px 30px;gap:30px}
+  .photo{flex:0 0 38%;border-radius:16px;overflow:hidden;background:var(--surface);position:relative}
+  .photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .6s}
+  .photo img.show{opacity:1}
+  .info{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+  .inner{transition:opacity .45s}
+  .name{font-size:2.2rem;font-weight:700;line-height:1.08}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px}
+  .chip{font-size:.82rem;border:1px solid var(--border);border-radius:20px;padding:4px 11px;color:var(--mid)}
+  .chip.cat{color:var(--accent);border-color:rgba(224,164,88,.4)}.chip.area{color:var(--herb);border-color:rgba(143,191,106,.4)}
+  .cols{display:flex;gap:26px;min-height:0}
+  .ings{flex:0 0 42%;display:flex;flex-direction:column;gap:2px}
+  .ings .i{font-size:1rem;display:flex;gap:7px;line-height:1.35}.ings .i::before{content:"•";color:var(--accent)}
+  .instr{flex:1;color:var(--mid);font-size:.95rem;line-height:1.5;
+    display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
+  .dots{display:flex;gap:6px;margin-top:14px}.dots i{width:6px;height:6px;border-radius:50%;background:var(--border);transition:background .3s,width .3s}.dots i.on{background:var(--accent);width:18px;border-radius:3px}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim);text-align:center;padding:30px}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">Waiting for reciped…<br><span style="font-size:.8rem;opacity:.7">run reciped once, or load its LaunchAgent</span></div>
+  <div id="wrap" style="display:none">
+    <div class="photo"><img id="img" alt=""></div>
+    <div class="info"><div class="inner" id="inner">
+      <div class="name" id="name"></div>
+      <div class="chips" id="chips"></div>
+      <div class="cols"><div class="ings" id="ings"></div><div class="instr" id="instr"></div></div>
+    </div><div class="dots" id="dots"></div></div>
+  </div>
+<script>
+(function(){
+  "use strict";
+  var settings={rotateSec:18};var $=function(i){return document.getElementById(i)};
+  var meals=[],idx=-1,timer=null,dataKey="";
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function show(i){
+    if(!meals.length)return;idx=(i+meals.length)%meals.length;var d=meals[idx];
+    var inner=$("inner"),img=$("img");inner.style.opacity="0";img.classList.remove("show");
+    setTimeout(function(){
+      $("name").textContent=d.name;
+      var chips='';if(d.category)chips+='<span class="chip cat">'+esc(d.category)+'</span>';if(d.area)chips+='<span class="chip area">'+esc(d.area)+'</span>';
+      $("chips").innerHTML=chips;
+      $("ings").innerHTML=(d.ingredients||[]).slice(0,10).map(function(x){return '<div class="i">'+esc(x)+'</div>'}).join("");
+      $("instr").textContent=d.instructions||"";
+      if(d.file){img.onload=function(){img.classList.add("show")};img.src=d.file+"?i="+d.id}else img.removeAttribute("src");
+      inner.style.opacity="1";
+      $("dots").innerHTML=meals.map(function(_,k){return '<i class="'+(k===idx?"on":"")+'"></i>'}).join("");
+    },240);
+  }
+  function schedule(){if(timer)clearInterval(timer);timer=setInterval(function(){show(idx+1)},Math.max(6,Number(settings.rotateSec)||18)*1000)}
+  function load(){var s=document.createElement("script");s.src="data.js?v="+Date.now();
+    s.onload=function(){s.remove();var d=window.__RECIPES__;if(!d)return;var key=(d.meals||[]).map(function(x){return x.id}).join(",");
+      if(key!==dataKey){dataKey=key;meals=d.meals||[];idx=-1;if(meals.length){$("boot").classList.add("hidden");$("wrap").style.display="flex";show(0);schedule()}}};
+    s.onerror=function(){s.remove();if(!meals.length)$("boot").textContent="reciped not running — see README"};
+    document.head.appendChild(s)}
+  if(window.Vardek&&Vardek.settings)settings=Object.assign(settings,Vardek.settings);
+  if(window.Vardek&&Vardek.onSettingsChange)Vardek.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);idx=-1;if(meals.length){show(0);schedule()}});
+  if(window.Vardek&&Vardek.onRefresh)Vardek.onRefresh(load);
+  load();setInterval(load,60000);
+})();
+</script></body></html>

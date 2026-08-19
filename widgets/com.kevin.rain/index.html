@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Rain</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--text-mid:#8089a6;--text-dim:#565f89;--rain:#7dcfff;--mono:ui-monospace,'SF Mono',Menlo,monospace}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;flex-direction:column;height:100vh;padding:20px 26px}
+  .top{display:flex;align-items:flex-start;gap:20px}
+  .now{display:flex;flex-direction:column}
+  .now .temp{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:3.4rem;line-height:1}
+  .now .cond{color:var(--text-mid);font-size:1.1rem;margin-top:2px}
+  .now .loc{color:var(--text-dim);font-family:var(--mono);font-size:.82rem;margin-top:4px}
+  .sp{flex:1}
+  .verdict{text-align:right}
+  .verdict .big{font-size:1.7rem;font-weight:700}.verdict .big.wet{color:var(--rain)}.verdict .big.dry{color:#9ece6a}
+  .verdict .sub{color:var(--text-mid);font-family:var(--mono);font-size:.85rem;margin-top:3px}
+  .chart{flex:1;min-height:0;margin-top:18px;display:flex;flex-direction:column}
+  .chart .lbl{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px}
+  canvas{flex:1;width:100%;min-height:40px}
+  #status{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);margin-top:6px}
+  #status.err{color:#f7768e}
+  @media(max-height:220px){.now .temp{font-size:2rem}.chart .lbl,.now .loc,.now .cond{display:none}.top{align-items:center}}
+</style></head>
+<body>
+  <div id="wrap">
+    <div class="top">
+      <div class="now"><div class="temp" id="temp">—</div><div class="cond" id="cond"></div><div class="loc" id="loc"></div></div>
+      <div class="sp"></div>
+      <div class="verdict"><div class="big" id="verdict"></div><div class="sub" id="vsub"></div></div>
+    </div>
+    <div class="chart"><div class="lbl">Temp & rain chance · next 12h</div><canvas id="c"></canvas></div>
+    <div id="status">connecting…</div>
+  </div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={latitude:37.7749,longitude:-122.4194,units:"fahrenheit"}, $=function(i){return document.getElementById(i)}, last=0, data=null;
+  var canvas=$("c"), ctx=canvas.getContext("2d"), dpr=1;
+  // WMO weather codes → label
+  var WMO={0:"Clear",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",48:"Rime fog",51:"Light drizzle",53:"Drizzle",55:"Heavy drizzle",
+    61:"Light rain",63:"Rain",65:"Heavy rain",66:"Freezing rain",67:"Freezing rain",71:"Light snow",73:"Snow",75:"Heavy snow",77:"Snow grains",
+    80:"Light showers",81:"Showers",82:"Violent showers",85:"Snow showers",86:"Snow showers",95:"Thunderstorm",96:"Thunderstorm+hail",99:"Thunderstorm+hail"};
+  function draw(){
+    if(!data)return;
+    dpr=Math.min(window.devicePixelRatio||1,2);
+    var w=Math.round(canvas.clientWidth*dpr),h=Math.round(canvas.clientHeight*dpr);
+    if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}
+    ctx.clearRect(0,0,w,h);
+    var probs=data.probs,temps=data.temps,times=data.times,n=probs.length;
+    if(!n)return;
+    var gap=3*dpr,bw=(w-gap*(n-1))/n,base=h-16*dpr,top=8*dpr;
+    // precip probability bars (fill from baseline; scaled so low chances are still faintly visible)
+    ctx.fillStyle="rgba(125,207,255,.10)";ctx.fillRect(0,base,w,1*dpr);
+    for(var i=0;i<n;i++){
+      var pr=probs[i]||0,x=i*(bw+gap);
+      var bh=pr/100*(base-top);
+      if(pr>0){ctx.fillStyle="rgba(125,207,255,"+(0.25+pr/100*0.65)+")";ctx.fillRect(x,base-bh,bw,bh);}
+      if(i%3===0){ctx.fillStyle="rgba(120,137,166,.75)";ctx.font=(9*dpr)+"px ui-monospace,monospace";ctx.textAlign="center";
+        var hr=new Date(times[i]).getHours();ctx.fillText((hr%12||12)+(hr<12?"a":"p"),x+bw/2,h-3*dpr)}
+    }
+    // temperature line across the chart (always populated)
+    if(temps&&temps.length){
+      var mn=Math.min.apply(null,temps),mx=Math.max.apply(null,temps),rng=(mx-mn)||1;
+      var ty=function(t){return base-8*dpr-(t-mn)/rng*(base-top-16*dpr)};
+      ctx.beginPath();
+      temps.forEach(function(t,i){var x=i*(bw+gap)+bw/2;i===0?ctx.moveTo(x,ty(t)):ctx.lineTo(x,ty(t))});
+      ctx.strokeStyle="#f0a838";ctx.lineWidth=2*dpr;ctx.lineJoin="round";ctx.stroke();
+      // endpoints labels
+      ctx.fillStyle="rgba(240,168,56,.9)";ctx.font=(10*dpr)+"px ui-monospace,monospace";
+      ctx.textAlign="left";ctx.fillText(Math.round(temps[0])+"°",bw/2+4*dpr,ty(temps[0])-5*dpr);
+      ctx.textAlign="right";ctx.fillText(Math.round(temps[n-1])+"°",w-4*dpr,ty(temps[n-1])-5*dpr);
+    }
+  }
+  function render(){
+    var u=settings.units==="celsius"?"C":"F";
+    $("temp").textContent=Math.round(data.temp)+"°"+u;
+    $("cond").textContent=WMO[data.code]||"—";
+    $("loc").textContent=Number(settings.latitude).toFixed(2)+", "+Number(settings.longitude).toFixed(2);
+    // find first hour with >30% prob
+    var idx=-1;for(var i=0;i<data.probs.length;i++){if((data.probs[i]||0)>=30){idx=i;break}}
+    var maxP=Math.max.apply(null,data.probs.concat([0]));
+    var v=$("verdict"),vs=$("vsub");
+    if(data.precipNow>0){v.textContent="Raining now";v.className="big wet";vs.textContent=data.precipNow.toFixed(2)+" in/hr"}
+    else if(idx>=0){var hrs=idx;v.textContent="Rain in ~"+hrs+"h";v.className="big wet";vs.textContent=(data.probs[idx])+"% chance"}
+    else{v.textContent="Dry";v.className="big dry";vs.textContent="max "+maxP+"% next 12h"}
+    draw();
+  }
+  async function load(){
+    if(Date.now()-last<20000)return; last=Date.now();
+    try{
+      var url="https://api.open-meteo.com/v1/forecast?latitude="+Number(settings.latitude)+"&longitude="+Number(settings.longitude)
+        +"&current=temperature_2m,precipitation,weather_code&hourly=precipitation_probability,precipitation,temperature_2m&forecast_hours=13&temperature_unit="+(settings.units||"fahrenheit")+"&timezone=auto";
+      var res=await xemd.proxy.fetch(url,{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();
+      data={temp:d.current.temperature_2m,code:d.current.weather_code,precipNow:d.current.precipitation||0,
+        probs:(d.hourly.precipitation_probability||[]).slice(0,12),amts:(d.hourly.precipitation||[]).slice(0,12),temps:(d.hourly.temperature_2m||[]).slice(0,12),times:(d.hourly.time||[]).slice(0,12)};
+      render();$("status").className="";$("status").textContent="Open-Meteo · updated "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="weather api: "+(e.message||e)}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,300000);
+    window.addEventListener("resize",draw);
+  })();
+</script></body></html>

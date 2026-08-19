@@ -1,0 +1,48 @@
+{
+  "id": "com.kevin.alerts",
+  "name": "Weather Alerts",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 300,
+  "permissions": {
+    "proxy": [
+      "https://api.weather.gov/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "area": {
+      "type": "string",
+      "label": "State code (e.g. CA, TX) or leave blank + set point",
+      "default": "CA"
+    },
+    "point": {
+      "type": "string",
+      "label": "Point lat,lon (optional, overrides state)",
+      "default": ""
+    }
+  }
+}

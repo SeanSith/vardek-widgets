@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sports</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--live:#f7768e;--win:#9ece6a}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;flex-direction:column;height:100vh;padding:20px 26px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+  .head h1{font-size:1.25rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sub{color:var(--mid);font-size:.95rem}.head .sp{flex:1}
+  .head .cnt{font-family:var(--mono);font-size:.85rem;color:var(--dim)}
+  #grid{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:min-content;gap:8px 18px;align-content:center;overflow:hidden}
+  .g{display:grid;grid-template-columns:1fr 4.6em;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 13px}
+  .g .teams{min-width:0}
+  .tm{display:flex;align-items:center;gap:9px;padding:2px 0}
+  .tm .badge{width:34px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.72rem;font-weight:800;color:#fff;flex-shrink:0;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+  .tm .nm{font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+  .tm .sc{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1.25rem;font-weight:700;color:var(--mid)}
+  .tm.win .nm{color:var(--text)}.tm.win .sc{color:var(--win)}
+  .tm.lose{opacity:.6}
+  .g .status{text-align:right;font-family:var(--mono);font-size:.8rem;line-height:1.2}
+  .g .status .s{color:var(--mid)}.g .status .s.final{color:var(--dim)}
+  .g .status .s.live{color:var(--live);font-weight:700}
+  .g .status .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--live);margin-right:4px;animation:p 1.2s infinite}
+  @keyframes p{0%,100%{opacity:1}50%{opacity:.3}}
+  #status{position:fixed;left:26px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--live)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+  .empty{grid-column:1/-1;text-align:center;color:var(--dim);align-self:center}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic" id="lic">🏈</span><span id="lname">Sports</span></h1><span class="sub" id="sub"></span><span class="sp"></span><span class="cnt" id="cnt"></span></div>
+    <div id="grid"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={league:"nfl"}, $=function(i){return document.getElementById(i)}, last=0;
+  var LEAGUES={nfl:["football/nfl","🏈","NFL"],nba:["basketball/nba","🏀","NBA"],mlb:["baseball/mlb","⚾","MLB"],
+    nhl:["hockey/nhl","🏒","NHL"],ncaaf:["football/college-football","🏈","College Football"],
+    ncaab:["basketball/mens-college-basketball","🏀","College Basketball"],
+    epl:["soccer/eng.1","⚽","Premier League"],mls:["soccer/usa.1","⚽","MLS"],ucl:["soccer/uefa.champions","⚽","Champions League"]};
+  function esc(s){return String(s).replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function badge(t){var col="#"+(t.color&&t.color.length>=6?t.color:"555555");
+    return '<span class="badge" style="background:'+col+'">'+esc((t.abbr||"").slice(0,4))+'</span>'}
+  function teamRow(t,state,showScore){
+    var cls="tm"+(state==="post"?(t.winner?" win":" lose"):"");
+    return '<div class="'+cls+'">'+badge(t)+'<span class="nm">'+esc(t.name)+'</span>'+(showScore?'<span class="sc">'+esc(t.score)+'</span>':'')+'</div>';
+  }
+  function render(d){
+    var meta=LEAGUES[settings.league]||LEAGUES.nfl;
+    $("lic").textContent=meta[1];$("lname").textContent=meta[2];
+    var evs=d.events||[];
+    var day=evs[0]?new Date(evs[0].date).toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"}):"";
+    $("sub").textContent=day;$("cnt").textContent=evs.length+" game"+(evs.length!==1?"s":"");
+    var grid=$("grid");grid.innerHTML="";
+    if(!evs.length){grid.innerHTML='<div class="empty">No games scheduled today.</div>';}
+    var max=12;
+    evs.slice(0,max).forEach(function(e){
+      var c=e.competitions[0],st=e.status.type,state=st.state,showScore=state!=="pre";
+      var cs=c.competitors,home=cs.filter(function(x){return x.homeAway==="home"})[0]||cs[0],away=cs.filter(function(x){return x.homeAway==="away"})[0]||cs[1];
+      function T(x){return{abbr:x.team.abbreviation,name:x.team.shortDisplayName||x.team.abbreviation,color:x.team.color,score:x.score,winner:x.winner}}
+      var statusHtml;
+      if(state==="in")statusHtml='<span class="s live"><span class="dot"></span>'+esc(st.shortDetail||"LIVE")+'</span>';
+      else if(state==="post")statusHtml='<span class="s final">'+esc(st.shortDetail||"Final")+'</span>';
+      else statusHtml='<span class="s">'+esc(st.shortDetail||"")+'</span>';
+      var g=document.createElement("div");g.className="g";
+      g.innerHTML='<div class="teams">'+teamRow(T(away),state,showScore)+teamRow(T(home),state,showScore)+'</div><div class="status">'+statusHtml+'</div>';
+      grid.appendChild(g);
+    });
+    if(evs.length>max){var m=document.createElement("div");m.className="empty";m.style.gridColumn="1/-1";m.style.color="var(--dim)";m.textContent="+"+(evs.length-max)+" more";grid.appendChild(m)}
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<15000)return; last=Date.now();
+    try{
+      var path=(LEAGUES[settings.league]||LEAGUES.nfl)[0];
+      var res=await xemd.proxy.fetch("https://site.api.espn.com/apis/site/v2/sports/"+path+"/scoreboard",{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      render(await res.json());
+      $("status").className="";$("status").textContent="ESPN · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="espn api: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="scores unavailable"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,90000);
+  })();
+</script></body></html>

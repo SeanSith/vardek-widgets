@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Status Board</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--text-mid:#8089a6;--text-dim:#565f89;--mono:ui-monospace,'SF Mono',Menlo,monospace;
+    --ok:#9ece6a;--minor:#e0af68;--major:#ff9e64;--critical:#f7768e;--unknown:#565f89}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;flex-direction:column;height:100vh;padding:16px 20px 10px}
+  .head{display:flex;align-items:center;gap:10px;margin-bottom:12px}.head h1{font-size:1.2rem;font-weight:700}.head .sp{flex:1}
+  .head .allok{font-family:var(--mono);font-size:.85rem;color:var(--ok)}.head .allok.bad{color:var(--major)}
+  #grid{flex:1;min-height:0;display:grid;gap:12px}
+  .svc{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;min-width:0;overflow:hidden}
+  .svc .dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;background:var(--unknown)}
+  .svc.ok .dot{background:var(--ok)}.svc.minor .dot{background:var(--minor)}.svc.major .dot{background:var(--major)}.svc.critical .dot{background:var(--critical)}
+  .svc .info{min-width:0;flex:1}
+  .svc .nm{font-size:1.15rem;font-weight:600}
+  .svc .ds{font-family:var(--mono);font-size:.82rem;color:var(--text-mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .svc.ok .ds{color:var(--text-dim)}.svc.minor .ds{color:var(--minor)}.svc.major .ds{color:var(--major)}.svc.critical .ds{color:var(--critical)}
+  #upd{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);margin-top:6px}
+  .err{grid-column:1/-1;align-self:center;text-align:center;color:var(--text-dim);font-family:var(--mono);font-size:.85rem;padding:20px}
+</style></head>
+<body>
+  <div id="wrap"><div class="head"><span style="font-size:1.3rem">🟢</span><h1>Status</h1><span class="sp"></span><span class="allok" id="allok"></span></div><div id="grid"></div><div id="upd"></div></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={services:""}, $=function(i){return document.getElementById(i)}, last=0;
+  function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+  function parseSvcs(){return (settings.services||"").split(",").map(function(s){var p=s.split("|");var name=(p[0]||"").trim();var host=(p[1]||p[0]||"").trim().replace(/^https?:\/\//,"").replace(/\/.*$/,"");if(!host)return null;return {name:name||host,host:host}}).filter(Boolean).slice(0,10)}
+  function cls(ind){return ind==="none"?"ok":ind==="minor"?"minor":ind==="major"?"major":ind==="critical"?"critical":"unknown"}
+  function layout(n){var cw=$("grid").clientWidth,ch=$("grid").clientHeight;var cols=ch<200?Math.min(n,4):(cw/ch>=1.7?(n<=3?n:2):1);
+    $("grid").style.gridTemplateColumns="repeat("+cols+",1fr)";$("grid").style.gridTemplateRows="repeat("+Math.ceil(n/cols)+",1fr)"}
+  async function load(){
+    if(Date.now()-last<10000)return;last=Date.now();
+    var svcs=parseSvcs();
+    if(!svcs.length){$("grid").innerHTML='<div class="err">Add services in settings: Name|status-host</div>';return}
+    layout(svcs.length);
+    var results=await Promise.all(svcs.map(function(s){
+      return xemd.proxy.fetch("https://"+s.host+"/api/v2/status.json",{headers:{Accept:"application/json"}})
+        .then(function(r){return r.ok?r.json():null}).then(function(j){return {s:s,st:j&&j.status?j.status:null}}).catch(function(){return {s:s,st:null}});
+    }));
+    var g=$("grid");g.textContent="";var worst="ok";
+    results.forEach(function(r){
+      var ind=r.st?r.st.indicator:null,c=cls(ind);
+      if(c==="critical")worst="critical";else if(c==="major"&&worst!=="critical")worst="major";else if(c==="minor"&&worst==="ok")worst="minor";
+      var svc=el("div","svc "+c);svc.appendChild(el("div","dot"));
+      var info=el("div","info");info.appendChild(el("div","nm",r.s.name));
+      info.appendChild(el("div","ds",r.st?r.st.description:"unreachable"));
+      svc.appendChild(info);g.appendChild(svc);
+    });
+    var a=$("allok");a.className="allok"+(worst==="ok"?"":" bad");a.textContent=worst==="ok"?"✓ All operational":"⚠ "+worst+" issue";
+    $("upd").textContent="updated "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,120000);window.addEventListener("resize",function(){last=0;load()});
+  })();
+</script></body></html>

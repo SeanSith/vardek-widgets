@@ -1,0 +1,48 @@
+{
+  "id": "com.kevin.bart",
+  "name": "BART Departures",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 60,
+  "permissions": {
+    "proxy": [
+      "https://api.bart.gov/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "station": {
+      "type": "string",
+      "label": "Station code (e.g. EMBR, MONT, 12TH)",
+      "default": "EMBR"
+    },
+    "apiKey": {
+      "type": "string",
+      "label": "BART API key (public demo works)",
+      "default": "MW9S-E7SL-26DU-VV8V"
+    }
+  }
+}

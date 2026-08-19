@@ -1,0 +1,51 @@
+{
+  "id": "com.kevin.meetingplanner",
+  "name": "Meeting Planner",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 300,
+  "permissions": {
+    "proxy": [],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "cities": {
+      "type": "string",
+      "label": "Cities (Name,IANA-TZ; ...)",
+      "default": "San Francisco,America/Los_Angeles;New York,America/New_York;London,Europe/London;Berlin,Europe/Berlin;Bengaluru,Asia/Kolkata;Tokyo,Asia/Tokyo"
+    },
+    "workStart": {
+      "type": "number",
+      "label": "Work start hour",
+      "default": 9
+    },
+    "workEnd": {
+      "type": "number",
+      "label": "Work end hour",
+      "default": 18
+    }
+  }
+}

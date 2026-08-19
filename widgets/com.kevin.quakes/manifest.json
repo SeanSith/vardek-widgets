@@ -1,0 +1,59 @@
+{
+  "id": "com.kevin.quakes",
+  "name": "Earthquakes",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 300,
+  "permissions": {
+    "proxy": [
+      "https://earthquake.usgs.gov/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "feed": {
+      "type": "enum",
+      "label": "Feed",
+      "values": [
+        "1.0_hour",
+        "2.5_day",
+        "4.5_day",
+        "all_day",
+        "significant_week"
+      ],
+      "default": "2.5_day"
+    },
+    "units": {
+      "type": "enum",
+      "label": "Distance units",
+      "values": [
+        "km",
+        "mi"
+      ],
+      "default": "mi"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "id": "com.kevin.calc",
+  "name": "Calculator",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    }
+  ],
+  "settingsSchema": {}
+}

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Standings</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--gold:#e0c07a;--win:#9ece6a;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:18px 26px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+  .head h1{font-size:1.25rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sp{flex:1}.head .upd{font-family:var(--mono);font-size:.78rem;color:var(--dim)}
+  .cols{flex:1;min-height:0;display:flex;gap:24px}
+  .conf{flex:1;min-width:0;display:flex;flex-direction:column}
+  .conf .ch{font-size:.82rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;
+    display:grid;grid-template-columns:1.6em 1fr 3.6em 3.4em;gap:8px}
+  .conf .ch .r{text-align:right}
+  .tr{display:grid;grid-template-columns:1.6em 1fr 3.6em 3.4em;gap:8px;align-items:center;padding:4.5px 0}
+  .tr+.tr{border-top:1px solid rgba(42,51,80,.4)}
+  .tr .sd{font-family:var(--mono);font-weight:700;color:var(--dim);text-align:center;font-size:.95rem}
+  .tr.playoff .sd{color:var(--gold)}
+  .tr .nm{font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tr .wl{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;font-size:.95rem}
+  .tr .gb{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--mid);font-size:.95rem}
+  #status{position:fixed;left:26px;bottom:6px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic" id="lic">🏀</span><span id="lname">Standings</span></h1><span class="sp"></span><span class="upd" id="upd"></span></div>
+    <div class="cols" id="cols"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={league:"nba"};
+  var $=function(i){return document.getElementById(i)}, last=0;
+  var LG={nba:["basketball/nba","🏀","NBA",8],wnba:["basketball/wnba","🏀","WNBA",8],mlb:["baseball/mlb","⚾","MLB",5],nfl:["football/nfl","🏈","NFL",7],nhl:["hockey/nhl","🏒","NHL",8]};
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function stat(e,n){var s=(e.stats||[]).filter(function(x){return x.name===n})[0];return s?s.displayValue:""}
+  function render(d){
+    var meta=LG[settings.league]||LG.nba;$("lic").textContent=meta[1];$("lname").textContent=meta[2]+" Standings";
+    var cutoff=meta[3];
+    var kids=(d.children||[]).slice(0,2);
+    $("cols").innerHTML=kids.map(function(c){
+      var entries=(c.standings&&c.standings.entries||[]).slice().sort(function(a,b){
+        var sa=parseInt(stat(a,"playoffSeed"),10),sb=parseInt(stat(b,"playoffSeed"),10);
+        if(isNaN(sa)&&isNaN(sb)){return (parseInt(stat(b,"wins"),10)||0)-(parseInt(stat(a,"wins"),10)||0)}
+        return (isNaN(sa)?99:sa)-(isNaN(sb)?99:sb);
+      }).slice(0,8);
+      var rows=entries.map(function(e,i){
+        var seed=stat(e,"playoffSeed")||(i+1), wins=stat(e,"wins"),loss=stat(e,"losses");
+        var gb=stat(e,"gamesBehind");if(gb==="-"||gb==="0")gb="—";
+        return '<div class="tr'+((+seed<=cutoff)?" playoff":"")+'"><div class="sd">'+seed+'</div>'
+          +'<div class="nm">'+esc(e.team.shortDisplayName||e.team.displayName)+'</div>'
+          +'<div class="wl">'+wins+'–'+loss+'</div><div class="gb">'+gb+'</div></div>';
+      }).join("");
+      return '<div class="conf"><div class="ch"><span></span><span>'+esc(c.name)+'</span><span class="r">W–L</span><span class="r">GB</span></div>'+rows+'</div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var meta=LG[settings.league]||LG.nba;
+      var res=await xemd.proxy.fetch("https://site.api.espn.com/apis/v2/sports/"+meta[0]+"/standings",{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();if(!d.children||!d.children.length)throw new Error("no standings");
+      $("upd").textContent=(d.season&&d.season.displayName)||"";
+      render(d);
+      $("status").className="";$("status").textContent="ESPN · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="espn: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="standings unavailable"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,1800000);
+  })();
+</script></body></html>

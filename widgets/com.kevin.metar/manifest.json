@@ -1,0 +1,52 @@
+{
+  "id": "com.kevin.metar",
+  "name": "METAR",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 600,
+  "permissions": {
+    "proxy": [
+      "https://aviationweather.gov/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "airports": {
+      "type": "string",
+      "label": "Airport ICAO codes (comma-separated)",
+      "default": "KSFO,KOAK,KSJC,KLAX"
+    },
+    "units": {
+      "type": "enum",
+      "label": "Temp units",
+      "values": [
+        "celsius",
+        "fahrenheit"
+      ],
+      "default": "fahrenheit"
+    }
+  }
+}

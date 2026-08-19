@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Games</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--surface-2:#1b2130;--border:#2a3350;--text:#e6e9ef;--text-mid:#8089a6;--text-dim:#565f89;--accent:#7aa2f7;--mono:ui-monospace,'SF Mono',Menlo,monospace}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+  #root{position:relative;width:100%;height:100%}
+  canvas{position:absolute;inset:0;width:100%;height:100%}
+  .hdr{position:absolute;left:16px;top:12px;font-family:var(--mono);font-size:.9rem;color:var(--text-mid)}
+  .hdr b{color:var(--text);font-size:1.3rem}
+  .over{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(11,14,21,.82);z-index:2}
+  .over.on{display:flex}.over .t{font-size:2rem;font-weight:700}.over .s{color:var(--text-mid);font-family:var(--mono)}
+  .over .b{margin-top:10px;padding:12px 28px;border:1px solid var(--accent);border-radius:12px;color:var(--accent);font-weight:600;cursor:pointer;min-height:48px;display:flex;align-items:center}
+  /* dpad / arrow controls */
+  #pad{position:absolute;right:18px;bottom:16px;display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,54px);gap:6px;z-index:3}
+  #pad .k{background:var(--surface);border:1px solid var(--border);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;color:var(--text);cursor:pointer}
+  #pad .k:active{background:var(--surface-2);border-color:var(--accent)}
+  #pad .up{grid-area:1/2}#pad .left{grid-area:2/1}#pad .right{grid-area:2/3}#pad .down{grid-area:3/2}
+  body:not(.dpad) #pad{display:none}
+  /* chess halves */
+  .chalf{position:absolute;left:0;right:0;height:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:1}
+  #ctop{top:0;transform:rotate(180deg)}#cbot{bottom:0}
+  body:not(.chess) .chalf{display:none}
+  .cface{text-align:center}.cface .clk{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:4rem;font-weight:700;line-height:1}
+  .cface .who{color:var(--text-dim);text-transform:uppercase;letter-spacing:.12em;font-size:.8rem;margin-bottom:6px}
+  .chalf.active{background:rgba(122,162,247,.10)}.chalf.active .clk{color:var(--accent)}
+  .chalf.low .clk{color:#f7768e}
+  #cbar{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;display:flex;gap:8px}
+  #cbar .cb{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 14px;font-size:.85rem;color:var(--text-mid);cursor:pointer;min-height:44px;display:flex;align-items:center}
+  body:not(.chess) #cbar{display:none}
+</style></head>
+<body>
+  <div id="root">
+    <canvas id="c"></canvas>
+    <div class="hdr" id="hdr"></div>
+    <div id="pad"><div class="k up" data-d="up">▲</div><div class="k left" data-d="left">◀</div><div class="k right" data-d="right">▶</div><div class="k down" data-d="down">▼</div></div>
+    <div class="chalf" id="ctop"><div class="cface"><div class="who">Player 2</div><div class="clk" id="ctopclk">5:00</div></div></div>
+    <div class="chalf" id="cbot"><div class="cface"><div class="who">Player 1</div><div class="clk" id="cbotclk">5:00</div></div></div>
+    <div id="cbar"><div class="cb" id="cpause">Pause</div><div class="cb" id="creset">Reset</div></div>
+    <div class="over" id="over"><div class="t" id="ovt"></div><div class="s" id="ovs"></div><div class="b" id="ovb">Play again</div></div>
+  </div>
+<script>
+(function(){
+  "use strict";
+  var settings={game:"2048",chessMinutes:5};
+  var $=function(i){return document.getElementById(i)};
+  var canvas=$("c"),ctx=canvas.getContext("2d"),W=0,H=0,dpr=1,game=null,raf=null;
+
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);var w=Math.round(canvas.clientWidth*dpr),h=Math.round(canvas.clientHeight*dpr);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;W=w;H=h}}
+  function clear(){ctx.fillStyle="#0b0e15";ctx.fillRect(0,0,W,H)}
+
+  // ───────────────────────── 2048 ─────────────────────────
+  var COL2048={0:"#1b2130",2:"#3a4260",4:"#4a5480",8:"#e0af68",16:"#e8965a",32:"#f0784a",64:"#f7768e",128:"#7aa2f7",256:"#6a9ae0",512:"#bb9af7",1024:"#9d7ee0",2048:"#9ece6a"};
+  function Game2048(){
+    var g=new Array(16).fill(0),score=0,over=false,won=false;
+    function add(){var e=[];for(var i=0;i<16;i++)if(!g[i])e.push(i);if(!e.length)return;g[e[Math.floor(Math.random()*e.length)]]=Math.random()<0.9?2:4}
+    function reset(){g=new Array(16).fill(0);score=0;over=false;won=false;add();add()}
+    function line(a){var f=a.filter(function(x){return x});for(var i=0;i<f.length-1;i++){if(f[i]===f[i+1]){f[i]*=2;score+=f[i];if(f[i]===2048)won=true;f.splice(i+1,1)}}while(f.length<4)f.push(0);return f}
+    function move(d){
+      var b=g.slice(),moved=false;
+      function get(r,c){return g[r*4+c]}function set(r,c,v){g[r*4+c]=v}
+      for(var k=0;k<4;k++){
+        var arr=[];for(var i=0;i<4;i++){var idx=d==="left"?k*4+i:d==="right"?k*4+(3-i):d==="up"?i*4+k:(3-i)*4+k;arr.push(g[idx])}
+        var res=line(arr);
+        for(var j=0;j<4;j++){var idx2=d==="left"?k*4+j:d==="right"?k*4+(3-j):d==="up"?j*4+k:(3-j)*4+k;g[idx2]=res[j]}
+      }
+      for(var m=0;m<16;m++)if(g[m]!==b[m])moved=true;
+      if(moved){add();if(!canMove()){over=true}}
+      return moved;
+    }
+    function canMove(){for(var i=0;i<16;i++){if(!g[i])return true;var r=Math.floor(i/4),c=i%4;if(c<3&&g[i]===g[i+1])return true;if(r<3&&g[i]===g[i+4])return true}return false}
+    reset();
+    return {
+      dpad:true,
+      key:function(d){if(over)return;move(d)},
+      restart:reset,
+      isOver:function(){return over},
+      overText:function(){return won?"You made 2048! 🎉":"Game over"},
+      overSub:function(){return "Score "+score},
+      draw:function(){
+        clear();
+        var pad=Math.min(W,H)*0.06,size=Math.min(W*0.62,H)-pad*2,ox=pad,oy=(H-size)/2,cell=size/4,gap=cell*0.09;
+        ctx.fillStyle="#11151f";roundRect(ox-gap,oy-gap,size+gap*2,size+gap*2,10*dpr);ctx.fill();
+        for(var i=0;i<16;i++){var r=Math.floor(i/4),c=i%4,x=ox+c*cell+gap/2,y=oy+r*cell+gap/2,v=g[i];
+          ctx.fillStyle=COL2048[v]||"#9ece6a";roundRect(x,y,cell-gap,cell-gap,6*dpr);ctx.fill();
+          if(v){ctx.fillStyle=v<=4?"#e6e9ef":"#11151f";ctx.font="700 "+(cell*(v<100?0.4:v<1000?0.32:0.26))+"px -apple-system,sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(v,x+(cell-gap)/2,y+(cell-gap)/2)}}
+        $("hdr").innerHTML="2048<br><b>"+score+"</b>";
+      }
+    };
+  }
+
+  // ───────────────────────── Snake ─────────────────────────
+  function GameSnake(){
+    var N=16,snake,dir,nd,food,over,score,acc;
+    function reset(){snake=[{x:8,y:8},{x:7,y:8},{x:6,y:8}];dir={x:1,y:0};nd=dir;food=place();over=false;score=0;acc=0}
+    function place(){var p;do{p={x:Math.floor(Math.random()*N),y:Math.floor(Math.random()*N)}}while(snake&&snake.some(function(s){return s.x===p.x&&s.y===p.y}));return p}
+    function step(){dir=nd;var h={x:(snake[0].x+dir.x+N)%N,y:(snake[0].y+dir.y+N)%N};
+      if(snake.some(function(s){return s.x===h.x&&s.y===h.y})){over=true;return}
+      snake.unshift(h);if(h.x===food.x&&h.y===food.y){score+=10;food=place()}else snake.pop();}
+    reset();
+    return {
+      dpad:true,
+      key:function(d){var m={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}}[d];if(m&&(m.x!==-dir.x||m.y!==-dir.y))nd=m},
+      restart:reset,
+      isOver:function(){return over},
+      overText:function(){return "Game over"},overSub:function(){return "Score "+score},
+      tick:function(dt){if(over)return;acc+=dt;if(acc>0.13){acc=0;step()}},
+      draw:function(){
+        clear();var size=Math.min(W*0.62,H)*0.92,ox=(Math.min(W*0.62,H)-size)/2+Math.min(W,H)*0.04,oy=(H-size)/2,cell=size/N;
+        ctx.fillStyle="#11151f";roundRect(ox,oy,size,size,10*dpr);ctx.fill();
+        ctx.fillStyle="#f7768e";ctx.beginPath();ctx.arc(ox+food.x*cell+cell/2,oy+food.y*cell+cell/2,cell*0.35,0,7);ctx.fill();
+        snake.forEach(function(s,i){ctx.fillStyle=i===0?"#9ece6a":"rgba(158,206,106,"+(0.9-i*0.02)+")";roundRect(ox+s.x*cell+cell*0.1,oy+s.y*cell+cell*0.1,cell*0.8,cell*0.8,cell*0.2);ctx.fill()});
+        $("hdr").innerHTML="Snake<br><b>"+score+"</b>";
+      }
+    };
+  }
+
+  // ───────────────────────── Chess Clock ─────────────────────────
+  function GameChess(){
+    var base=(Number(settings.chessMinutes)||5)*60;
+    var t={top:base,bot:base},active=null,running=false,lastT=0;
+    function reset(){t={top:base,bot:base};active=null;running=false}
+    reset();
+    function fmt(s){s=Math.max(0,s);var m=Math.floor(s/60),ss=Math.floor(s%60),d=Math.floor((s*10)%10);return m+":"+String(ss).padStart(2,"0")+(s<20?"."+d:"")}
+    return {
+      chess:true,
+      tap:function(side){ // tapping YOUR side ends your turn → opponent's clock starts
+        if(!running){active=side==="bot"?"bot":"top";running=true;lastT=perf();return}
+        if(side===active){active=active==="top"?"bot":"top"}
+      },
+      pause:function(){running=!running;lastT=perf()},
+      restart:reset,
+      isOver:function(){return t.top<=0||t.bot<=0},
+      overText:function(){return (t.top<=0?"Player 2":"Player 1")+" flagged"},overSub:function(){return "Tap reset for a new game"},
+      tick:function(dt){if(running&&active){t[active]-=dt;if(t[active]<=0){t[active]=0;running=false}}},
+      draw:function(){
+        clear();
+        $("hdr").textContent="";
+        $("ctopclk").textContent=fmt(t.top);$("cbotclk").textContent=fmt(t.bot);
+        $("ctop").className="chalf"+(active==="top"&&running?" active":"")+(t.top<20?" low":"");
+        $("cbot").className="chalf"+(active==="bot"&&running?" active":"")+(t.bot<20?" low":"");
+        $("cpause").textContent=running?"Pause":(active?"Resume":"Tap a side to start");
+      }
+    };
+  }
+  function perf(){return Date.now()/1000}
+
+  function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+
+  function makeGame(){
+    var m=settings.game;
+    if(m==="snake")return GameSnake();
+    if(m==="chessclock")return GameChess();
+    return Game2048();
+  }
+  function start(){
+    game=makeGame();
+    document.body.classList.toggle("dpad",!!game.dpad);
+    document.body.classList.toggle("chess",!!game.chess);
+    $("over").className="over";
+  }
+
+  // controls
+  [].slice.call(document.querySelectorAll("#pad .k")).forEach(function(k){k.addEventListener("click",function(){if(game&&game.key)game.key(k.dataset.d)})});
+  $("ctop").addEventListener("click",function(){if(game&&game.tap&&!game.isOver())game.tap("top")});
+  $("cbot").addEventListener("click",function(){if(game&&game.tap&&!game.isOver())game.tap("bot")});
+  $("cpause").addEventListener("click",function(e){e.stopPropagation();if(game&&game.pause)game.pause()});
+  $("creset").addEventListener("click",function(e){e.stopPropagation();if(game&&game.restart){game.restart();$("over").className="over"}});
+  $("ovb").addEventListener("click",function(){if(game&&game.restart){game.restart();$("over").className="over"}});
+
+  var last=null;
+  function loop(now){
+    var dt=last==null?0:Math.min(0.05,(now-last)/1000);last=now;
+    resize();
+    if(game){
+      if(game.tick)game.tick(dt);
+      game.draw();
+      if(game.isOver&&game.isOver()){var o=$("over");if(!o.classList.contains("on")){o.className="over on";$("ovt").textContent=game.overText();$("ovs").textContent=game.overSub();if(game.chess)$("ovb").style.display="none";else $("ovb").style.display="flex"}}
+    }
+    raf=requestAnimationFrame(loop);
+  }
+  function apply(){settings=Object.assign(settings,(window.Vardek&&Vardek.settings)||{});start()}
+  document.addEventListener("vardek:ready",apply);
+  if(window.Vardek&&window.Vardek.onSettingsChange)Vardek.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);start()});
+  window.addEventListener("resize",resize);
+  apply();requestAnimationFrame(loop);
+})();
+</script></body></html>

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Calendar</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#7aa2f7;--wknd:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;height:100vh;padding:26px 30px;gap:32px}
+  .today{flex:0 0 28%;min-width:0;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--border);padding-right:30px}
+  .today .wd{font-size:1.4rem;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+  .today .dnum{font-family:var(--mono);font-weight:700;font-size:6.5rem;line-height:.9;margin:2px 0}
+  .today .my{font-size:1.3rem;color:var(--mid)}
+  .today .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+  .today .chip{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-family:var(--mono);font-size:.85rem;color:var(--mid)}
+  .today .chip b{color:var(--text)}
+  .cal{flex:1;min-width:0;display:flex;flex-direction:column}
+  .cal .mh{font-size:1.5rem;font-weight:700;margin-bottom:10px}
+  .grid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:5px}
+  .dow{font-family:var(--mono);font-size:.82rem;color:var(--dim);text-align:center;text-transform:uppercase;padding-bottom:2px}
+  .cell{position:relative;border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1.5rem;font-weight:600}
+  .cell.oth{color:var(--dim);opacity:.45}
+  .cell.wknd{color:var(--wknd)}
+  .cell.today{background:var(--accent);color:#0b0e15;font-weight:800;box-shadow:0 4px 14px rgba(122,162,247,.35)}
+  .cell .moon{position:absolute;top:5px;right:8px;font-size:.85rem;line-height:1}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+  @media(max-width:760px){#wrap{flex-direction:column;padding:16px;gap:12px}.today{flex:0 0 auto;border-right:none;border-bottom:1px solid var(--border);padding-right:0;padding-bottom:12px}.today .dnum{font-size:3.6rem}}
+</style></head>
+<body>
+  <div id="boot">…</div>
+  <div id="wrap" style="display:none">
+    <div class="today">
+      <div class="wd" id="wd"></div><div class="dnum" id="dnum"></div><div class="my" id="my"></div>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="cal"><div class="mh" id="mh"></div><div class="grid" id="grid"></div></div>
+  </div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={weekStart:"sunday",showMoon:true};
+  var $=function(i){return document.getElementById(i)};
+  var D2R=Math.PI/180;
+  // Meeus ch.49 — JDE of a principal Moon phase. k integer=new, +.25 first qtr, +.5 full, +.75 last qtr
+  function phaseJDE(k){
+    var T=k/1236.85, JDE=2451550.09766+29.530588861*k+0.00015437*T*T-0.000000150*T*T*T+0.00000000073*T*T*T*T;
+    var E=1-0.002516*T-0.0000074*T*T;
+    var M=(2.5534+29.10535670*k-0.0000014*T*T-0.00000011*T*T*T)*D2R;
+    var Mp=(201.5643+385.81693528*k+0.0107582*T*T+0.00001238*T*T*T-0.000000058*T*T*T*T)*D2R;
+    var F=(160.7108+390.67050284*k-0.0016118*T*T-0.00000227*T*T*T+0.000000011*T*T*T*T)*D2R;
+    var O=(124.7746-1.56375588*k+0.0020672*T*T+0.00000215*T*T*T)*D2R;
+    var q=k-Math.floor(k), s=Math.sin, corr=0;
+    if(q<1e-6||Math.abs(q-0.5)<1e-6){var nm=q<1e-6;
+      corr=(nm?-0.40720:-0.40614)*s(Mp)+0.17241*E*s(M)+0.01608*s(2*Mp)+0.01039*s(2*F)+0.00739*E*s(Mp-M)
+        -0.00514*E*s(Mp+M)+0.00208*E*E*s(2*M)-0.00111*s(Mp-2*F)-0.00057*s(Mp+2*F)+0.00056*E*s(2*Mp+M)
+        -0.00042*s(3*Mp)+0.00042*E*s(M+2*F)+0.00038*E*s(M-2*F)-0.00024*E*s(2*Mp-M)-0.00017*s(O)
+        -0.00007*s(Mp+2*M)+0.00004*s(2*Mp-2*F)+0.00004*s(3*M)+0.00003*s(Mp+M-2*F)+0.00003*s(2*Mp+2*F)
+        -0.00003*s(Mp+M+2*F)+0.00003*s(Mp-M+2*F)-0.00002*s(Mp-M-2*F)-0.00002*s(3*Mp+M)+0.00002*s(4*Mp);
+    }else{
+      corr=-0.62801*s(Mp)+0.17172*E*s(M)-0.01183*E*s(Mp+M)+0.00862*s(2*Mp)+0.00804*s(2*F)+0.00454*E*s(Mp-M)
+        +0.00204*E*E*s(2*M)-0.00180*s(Mp-2*F)-0.00070*s(Mp+2*F)-0.00040*s(3*Mp)-0.00034*E*s(2*Mp-M)
+        +0.00032*E*s(M+2*F)+0.00032*E*s(M-2*F)-0.00028*E*E*s(Mp+2*M)+0.00027*E*s(2*Mp+M)-0.00017*s(O);
+      var W=0.00306-0.00038*E*Math.cos(M)+0.00026*Math.cos(Mp)-0.00002*Math.cos(Mp-M)+0.00002*Math.cos(Mp+M)+0.00002*Math.cos(2*F);
+      corr+=(Math.abs(q-0.25)<1e-6)?W:-W;
+    }
+    return JDE+corr;
+  }
+  function jdeToMs(jde){return (jde-2440587.5)*86400000}
+  // build {dayOfMonth: glyph} for the given year/month using accurate phase times (local dates)
+  function moonMap(y,m){
+    var map={};if(settings.showMoon===false)return map;
+    var glyphs={0:"🌑",0.25:"🌓",0.5:"🌕",0.75:"🌗"};
+    var kApprox=(y+(m+0.5)/12-2000)*12.3685, base=Math.round(kApprox);
+    for(var kb=base-1;kb<=base+1;kb++)for(var qi=0;qi<4;qi++){
+      var q=qi*0.25, dt=new Date(jdeToMs(phaseJDE(kb+q)));
+      if(dt.getFullYear()===y&&dt.getMonth()===m)map[dt.getDate()]=glyphs[q];
+    }
+    return map;
+  }
+
+  function doy(d){return Math.floor((d-new Date(d.getFullYear(),0,0))/86400000)}
+  function weekNum(d){var t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));var day=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-day);var ys=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil((((t-ys)/86400000)+1)/7)}
+  function render(){
+    var now=new Date();
+    $("wd").textContent=now.toLocaleDateString([],{weekday:"long"});
+    $("dnum").textContent=now.getDate();
+    $("my").textContent=now.toLocaleDateString([],{month:"long",year:"numeric"});
+    var chips=[["Day",doy(now)+" of "+(((now.getFullYear()%4===0&&now.getFullYear()%100!==0)||now.getFullYear()%400===0)?366:365)],
+      ["Week",weekNum(now)],["Q",Math.floor(now.getMonth()/3)+1]];
+    $("chips").innerHTML=chips.map(function(c){return '<span class="chip">'+c[0]+' <b>'+c[1]+'</b></span>'}).join("");
+    $("mh").textContent=now.toLocaleDateString([],{month:"long",year:"numeric"});
+    var mon=settings.weekStart==="monday";
+    var dows=mon?["Mo","Tu","We","Th","Fr","Sa","Su"]:["Su","Mo","Tu","We","Th","Fr","Sa"];
+    var grid=$("grid");grid.innerHTML="";
+    dows.forEach(function(d){var e=document.createElement("div");e.className="dow";e.textContent=d;grid.appendChild(e)});
+    var y=now.getFullYear(),m=now.getMonth();
+    var first=new Date(y,m,1),startDow=first.getDay();
+    var lead=mon?((startDow+6)%7):startDow;
+    var start=new Date(y,m,1-lead);
+    var todayKey=y+"-"+m+"-"+now.getDate();
+    var mmap=moonMap(y,m);
+    for(var i=0;i<42;i++){
+      var d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i);
+      var cell=document.createElement("div");cell.className="cell";
+      var oth=d.getMonth()!==m;var wknd=(d.getDay()===0||d.getDay()===6);
+      if(oth)cell.className+=" oth";else if(wknd)cell.className+=" wknd";
+      if(!oth && (d.getFullYear()+"-"+d.getMonth()+"-"+d.getDate())===todayKey)cell.className+=" today";
+      var g=(!oth&&mmap[d.getDate()])?mmap[d.getDate()]:"";
+      cell.innerHTML=(g&&!oth?'<span class="moon">'+g+'</span>':'')+d.getDate();
+      grid.appendChild(cell);
+    }
+    // trim to needed rows (5 or 6)
+    var lastReal=new Date(y,m+1,0).getDate();
+    var rowsNeeded=Math.ceil((lead+lastReal)/7);
+    if(rowsNeeded<6){ // remove trailing week if fully next-month
+      for(var k=0;k<7;k++)grid.removeChild(grid.lastChild);
+      grid.style.gridTemplateRows="repeat("+rowsNeeded+",1fr)";
+    }
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);render()});
+    xemd.onRefresh(render);xemd.ready();render();
+    // re-render at next midnight
+    setInterval(render,600000);
+  })();
+</script></body></html>

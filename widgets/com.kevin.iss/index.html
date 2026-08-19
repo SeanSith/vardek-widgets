@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ISS Tracker</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --bg: #060912; --text: #e6e9ef; --text-mid: #8089a6; --text-dim: #565f89; --iss: #ff9e64;
+          --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; }
+  #root { position: relative; width: 100%; height: 100%; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #panel { position: absolute; right: 18px; top: 16px; font-family: var(--mono); text-align: right; text-shadow: 0 1px 4px rgba(0,0,0,.7); }
+  #panel h1 { font-family: -apple-system, sans-serif; font-size: 1.05rem; font-weight: 700; letter-spacing: .01em; }
+  #panel .row { font-size: .85rem; color: var(--text-mid); margin-top: 4px; }
+  #panel .row b { color: var(--text); font-weight: 600; }
+  #panel .vis { margin-top: 6px; font-size: .8rem; }
+  #panel .vis.sun { color: #f0c060; } #panel .vis.night { color: #7aa2f7; }
+  #status { position: absolute; left: 16px; bottom: 10px; font-family: var(--mono); font-size: .76rem; color: var(--text-dim); }
+  #status.err { color: #f7768e; }
+</style>
+</head>
+<body>
+  <div id="root">
+    <canvas id="c"></canvas>
+    <div id="panel">
+      <h1>🛰 ISS</h1>
+      <div class="row" id="p-pos"></div>
+      <div class="row" id="p-alt"></div>
+      <div class="row" id="p-vel"></div>
+      <div class="row" id="p-dist"></div>
+      <div class="vis" id="p-vis"></div>
+    </div>
+    <div id="status">connecting…</div>
+  </div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings = { latitude: 37.7749, longitude: -122.4194 };
+  var $ = function (id) { return document.getElementById(id); };
+  var canvas = $("c"), ctx = canvas.getContext("2d");
+  var W = 0, H = 0, dpr = 1, iss = null, lastFetch = 0, err = null, rad = Math.PI / 180;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.max(1, Math.round(canvas.clientWidth * dpr)), h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; W = w; H = h; }
+  }
+  // map: full canvas equirectangular. lon[-180,180]->x, lat[90,-90]->y
+  function px(lon) { return (lon + 180) / 360 * W; }
+  function py(lat) { return (90 - lat) / 180 * H; }
+
+  // subsolar point (approx): declination + longitude where it's solar noon now
+  function subsolar() {
+    var now = new Date();
+    var start = Date.UTC(now.getUTCFullYear(), 0, 0);
+    var doy = Math.floor((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - start) / 86400000);
+    var g = 2 * Math.PI / 365 * (doy - 1 + (now.getUTCHours() - 12) / 24);
+    var decl = (0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g)
+                + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g)) / rad;
+    var eqtime = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+    var utcMin = now.getUTCHours() * 60 + now.getUTCMinutes() + now.getUTCSeconds() / 60;
+    var sunLon = -((utcMin + eqtime) / 4 - 180);       // longitude of subsolar point
+    while (sunLon > 180) sunLon -= 360; while (sunLon < -180) sunLon += 360;
+    return { lat: decl, lon: sunLon };
+  }
+
+  function draw() {
+    resize();
+    ctx.clearRect(0, 0, W, H);
+    // ocean base
+    var og = ctx.createLinearGradient(0, 0, 0, H);
+    og.addColorStop(0, "#0c1a2e"); og.addColorStop(0.5, "#0a1526"); og.addColorStop(1, "#0c1a2e");
+    ctx.fillStyle = og; ctx.fillRect(0, 0, W, H);
+
+    // day/night shading — sample sun altitude on a coarse grid
+    var ss = subsolar();
+    var cols = 90, rows = 46, cw = W / cols, ch = H / rows;
+    var sinD = Math.sin(ss.lat * rad), cosD = Math.cos(ss.lat * rad);
+    for (var j = 0; j < rows; j++) {
+      var lat = 90 - (j + 0.5) / rows * 180;
+      var sinL = Math.sin(lat * rad), cosL = Math.cos(lat * rad);
+      for (var i = 0; i < cols; i++) {
+        var lon = -180 + (i + 0.5) / cols * 360;
+        var ha = (lon - ss.lon) * rad;
+        var alt = Math.asin(sinL * sinD + cosL * cosD * Math.cos(ha)) / rad;
+        var a = alt < -6 ? 0.5 : alt < 0 ? 0.5 - (alt + 6) / 6 * 0.35 : alt < 6 ? 0.15 - alt / 6 * 0.15 : 0;
+        if (a > 0.01) { ctx.fillStyle = "rgba(3,6,14," + a + ")"; ctx.fillRect(i * cw, j * ch, cw + 1, ch + 1); }
+      }
+    }
+    // graticule
+    ctx.strokeStyle = "rgba(120,150,190,.14)"; ctx.lineWidth = 1 * dpr;
+    for (var lo = -150; lo <= 150; lo += 30) { ctx.beginPath(); ctx.moveTo(px(lo), 0); ctx.lineTo(px(lo), H); ctx.stroke(); }
+    for (var la = -60; la <= 60; la += 30) { ctx.beginPath(); ctx.moveTo(0, py(la)); ctx.lineTo(W, py(la)); ctx.stroke(); }
+    ctx.strokeStyle = "rgba(120,150,190,.28)"; ctx.beginPath(); ctx.moveTo(0, py(0)); ctx.lineTo(W, py(0)); ctx.stroke(); // equator
+
+    // subsolar marker
+    ctx.beginPath(); ctx.arc(px(ss.lon), py(ss.lat), 8 * dpr, 0, 7);
+    var sg = ctx.createRadialGradient(px(ss.lon), py(ss.lat), 0, px(ss.lon), py(ss.lat), 14 * dpr);
+    sg.addColorStop(0, "rgba(255,220,120,.55)"); sg.addColorStop(1, "rgba(255,220,120,0)");
+    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(px(ss.lon), py(ss.lat), 14 * dpr, 0, 7); ctx.fill();
+
+    // your location
+    var ux = px(Number(settings.longitude)), uy = py(Number(settings.latitude));
+    ctx.beginPath(); ctx.arc(ux, uy, 3 * dpr, 0, 7); ctx.fillStyle = "#7dd3fc"; ctx.fill();
+    ctx.fillStyle = "rgba(125,211,252,.8)"; ctx.font = (10 * dpr) + "px ui-monospace, monospace"; ctx.textAlign = "left"; ctx.fillText("you", ux + 6 * dpr, uy + 3 * dpr);
+
+    if (iss) {
+      // ground track (approx: 51.6° inclination sine through current point)
+      ctx.strokeStyle = "rgba(255,158,100,.35)"; ctx.lineWidth = 1.5 * dpr; ctx.beginPath();
+      var incl = 51.6, phase = Math.asin(Math.max(-1, Math.min(1, iss.latitude / incl))) - (iss.longitude * rad) * (360 / 360);
+      for (var x = -180; x <= 180; x += 2) {
+        var tl = incl * Math.sin(x * rad * 1 + (iss.longitude * -rad) + Math.asin(Math.max(-1, Math.min(1, iss.latitude / incl))));
+        var xx = px(x), yy = py(tl); if (x === -180) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+      }
+      ctx.stroke();
+      // ISS marker
+      var ix = px(iss.longitude), iy = py(iss.latitude);
+      var gg = ctx.createRadialGradient(ix, iy, 0, ix, iy, 22 * dpr);
+      gg.addColorStop(0, "rgba(255,158,100,.5)"); gg.addColorStop(1, "rgba(255,158,100,0)");
+      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(ix, iy, 22 * dpr, 0, 7); ctx.fill();
+      ctx.font = (16 * dpr) + "px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("🛰", ix, iy);
+      ctx.textBaseline = "alphabetic";
+    }
+    requestAnimationFrame(draw);
+  }
+
+  function greatCircleKm(la1, lo1, la2, lo2) {
+    var R = 6371, dLa = (la2 - la1) * rad, dLo = (lo2 - lo1) * rad;
+    var a = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(la1 * rad) * Math.cos(la2 * rad) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  function updatePanel() {
+    if (!iss) return;
+    $("p-pos").innerHTML = "<b>" + Math.abs(iss.latitude).toFixed(1) + "°" + (iss.latitude >= 0 ? "N" : "S") + "</b>  <b>" + Math.abs(iss.longitude).toFixed(1) + "°" + (iss.longitude >= 0 ? "E" : "W") + "</b>";
+    $("p-alt").innerHTML = "alt <b>" + Math.round(iss.altitude) + " km</b>";
+    $("p-vel").innerHTML = "speed <b>" + Math.round(iss.velocity).toLocaleString() + " km/h</b>";
+    var d = greatCircleKm(Number(settings.latitude), Number(settings.longitude), iss.latitude, iss.longitude);
+    $("p-dist").innerHTML = (d < 1200 ? "🔭 overhead " : "") + Math.round(d).toLocaleString() + " km from you";
+    var vis = (iss.visibility || "").toLowerCase();
+    var v = $("p-vis"); v.textContent = vis === "daylight" ? "☀️ in sunlight" : "🌙 in Earth's shadow";
+    v.className = "vis " + (vis === "daylight" ? "sun" : "night");
+  }
+
+  async function fetchData() {
+    if (Date.now() - lastFetch < 4000) return;
+    try {
+      var res = await xemd.proxy.fetch("https://api.wheretheiss.at/v1/satellites/25544", { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      iss = await res.json(); err = null; lastFetch = Date.now(); updatePanel();
+      $("status").className = ""; $("status").textContent = "updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    } catch (e) { err = e.message || "fetch failed"; $("status").className = "err"; $("status").textContent = "iss api: " + err; }
+  }
+
+  (async function () {
+    try { var s = await Promise.race([xemd.settings.get(), new Promise(function (r) { setTimeout(function () { r(null); }, 1500); })]); if (s) settings = Object.assign(settings, s); } catch (e) {}
+    xemd.onSettingsChange(function (s) { if (s) settings = Object.assign(settings, s); updatePanel(); });
+    xemd.onRefresh(function () { lastFetch = 0; fetchData(); });
+    xemd.ready();
+    fetchData(); setInterval(fetchData, 5000);
+    requestAnimationFrame(draw);
+  })();
+</script>
+</body>
+</html>

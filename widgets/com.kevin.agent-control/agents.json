@@ -1,0 +1,102 @@
+{
+  "apps": [
+    {
+      "key": "claude",
+      "name": "Claude",
+      "path": "/Applications/Claude.app",
+      "bundleId": "com.anthropic.claudefordesktop",
+      "exe": "Claude",
+      "emoji": "\u2733",
+      "auto": true,
+      "enabled": true,
+      "icon": "icons/claude.png"
+    },
+    {
+      "key": "chatgpt",
+      "name": "ChatGPT",
+      "path": "/Applications/ChatGPT.app",
+      "bundleId": "com.openai.codex",
+      "exe": "ChatGPT",
+      "emoji": "\u25ce",
+      "auto": true,
+      "enabled": true,
+      "icon": "icons/chatgpt.png"
+    },
+    {
+      "key": "cursor",
+      "name": "Cursor",
+      "path": "/Applications/Cursor.app",
+      "bundleId": "com.todesktop.230313mzl4w4u92",
+      "exe": "Cursor",
+      "emoji": "\u25ae",
+      "auto": true,
+      "enabled": true,
+      "icon": "icons/cursor.png"
+    },
+    {
+      "key": "antigravity",
+      "name": "Antigravity",
+      "path": "/Applications/Antigravity.app",
+      "bundleId": "com.google.antigravity",
+      "exe": "Antigravity",
+      "emoji": "\u25ed",
+      "auto": true,
+      "enabled": true,
+      "icon": "icons/antigravity.png"
+    },
+    {
+      "key": "grokbot",
+      "name": "Grok Bot",
+      "path": "/Applications/Grok Bot.app",
+      "bundleId": "com.anysphere.sand",
+      "exe": "Grok Bot",
+      "emoji": "\ud835\udd4f",
+      "auto": true,
+      "enabled": true,
+      "icon": "icons/grokbot.png"
+    },
+    {
+      "key": "lmstudio",
+      "name": "LM Studio",
+      "path": "/Applications/LM Studio.app",
+      "bundleId": "ai.elementlabs.lmstudio",
+      "exe": "LM Studio",
+      "emoji": "\u25a3",
+      "auto": true,
+      "enabled": true,
+      "icon": "icons/lmstudio.png"
+    },
+    {
+      "key": "warp",
+      "name": "Warp",
+      "path": "/Applications/Warp.app",
+      "bundleId": "dev.warp.Warp-Stable",
+      "exe": "stable",
+      "emoji": "\u25a4",
+      "auto": true,
+      "enabled": true,
+      "icon": "icons/warp.png"
+    }
+  ],
+  "terminal": "Terminal",
+  "processes": {
+    "claude": "Claude Code",
+    "codex": "Codex CLI",
+    "grok": "Grok CLI",
+    "muse": "Muse Code",
+    "opencode": "OpenCode",
+    "amp": "Amp",
+    "gemini": "Gemini CLI",
+    "aider": "Aider",
+    "crush": "Crush"
+  },
+  "bin": {
+    "agent-deck": "/Users/kevin/.local/bin/agent-deck",
+    "tmux": "/opt/homebrew/bin/tmux",
+    "open": "/usr/bin/open",
+    "osascript": "/usr/bin/osascript"
+  },
+  "pollSeconds": 5.0,
+  "python": "/usr/bin/python3",
+  "touchWatchdog": true
+}

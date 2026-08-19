@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Interval Timer</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--prep:#e0af68;--work:#6bd08a;--rest:#4ea1ff;--done:#bb9af7}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased;user-select:none}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .ringwrap{position:relative;width:min(58vh,340px);height:min(58vh,340px)}
+  svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .track{fill:none;stroke:var(--surface);stroke-width:12}
+  .prog{fill:none;stroke-width:12;stroke-linecap:round;transition:stroke .3s}
+  .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .phase{font-size:1.3rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .time{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:5rem;line-height:1}
+  .round{font-family:var(--mono);color:var(--mid);font-size:1rem;margin-top:4px}
+  .hint{margin-top:20px;color:var(--dim);font-size:.9rem}
+  .zones{position:absolute;inset:0;display:flex}
+  .zones .z{flex:1}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="wrap" style="display:none">
+    <div class="ringwrap"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="54"/><circle class="prog" id="prog" cx="60" cy="60" r="54"/></svg>
+      <div class="ctr"><div class="phase" id="phase">Ready</div><div class="time" id="time">00:00</div><div class="round" id="round"></div></div>
+    </div>
+    <div class="hint" id="hint">Tap right to start · tap left to reset</div>
+  </div>
+  <div class="zones"><div class="z" id="zleft"></div><div class="z" id="zright"></div></div>
+  <div id="boot" class="hidden"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={workSec:40,restSec:20,rounds:8,prepSec:10};
+  var $=function(i){return document.getElementById(i)};
+  var C=2*Math.PI*54;
+  var state={phase:"ready",round:0,remain:0,total:0,running:false,endAt:0},tick=null;
+  var COL={ready:"#8089a6",prep:"#e0af68",work:"#6bd08a",rest:"#4ea1ff",done:"#bb9af7"};
+  function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0")}
+  function setPhase(p,total){state.phase=p;state.total=total;state.remain=total;state.endAt=state.running?Date.now()+total*1000:0}
+  function build(){state={phase:"ready",round:0,remain:0,total:0,running:false,endAt:0};draw()}
+  function start(){
+    if(state.phase==="ready"||state.phase==="done"){state.round=1;state.running=true;setPhase("prep",Math.max(0,Number(settings.prepSec)||0)||0.001);}
+    else{state.running=!state.running;if(state.running)state.endAt=Date.now()+state.remain*1000;}
+    if(state.running&&!tick)tick=setInterval(loop,100);
+    draw();
+  }
+  function advance(){
+    var wk=Number(settings.workSec)||40,rs=Number(settings.restSec)||20,rd=Math.max(1,Number(settings.rounds)||8);
+    if(state.phase==="prep"){setPhase("work",wk);}
+    else if(state.phase==="work"){if(state.round>=rd){state.running=false;setPhase("done",0);}else{setPhase("rest",rs);}}
+    else if(state.phase==="rest"){state.round++;setPhase("work",wk);}
+  }
+  function loop(){
+    if(!state.running){return}
+    state.remain=(state.endAt-Date.now())/1000;
+    if(state.remain<=0){advance();if(state.phase==="done"){state.running=false;clearInterval(tick);tick=null}}
+    draw();
+  }
+  function draw(){
+    var p=state.phase,col=COL[p];
+    $("phase").textContent={ready:"Ready",prep:"Get Ready",work:"Work",rest:"Rest",done:"Done!"}[p];
+    $("phase").style.color=col;$("prog").style.stroke=col;$("time").style.color=p==="ready"||p==="done"?"var(--text)":col;
+    var rd=Math.max(1,Number(settings.rounds)||8);
+    if(p==="ready"){$("time").textContent=fmt((Number(settings.workSec)||40));$("round").textContent=rd+" rounds · "+ (Number(settings.workSec)||40)+"s / "+(Number(settings.restSec)||20)+"s";}
+    else if(p==="done"){$("time").textContent="✓";$("round").textContent="Completed "+rd+" rounds";}
+    else{$("time").textContent=fmt(state.remain);$("round").textContent="Round "+state.round+" / "+rd;}
+    var frac=state.total>0?Math.max(0,Math.min(1,state.remain/state.total)):(p==="ready"?1:0);
+    $("prog").style.strokeDasharray=C;$("prog").style.strokeDashoffset=C*(1-frac);
+    $("hint").textContent=state.running?"Tap right to pause · tap left to reset":(p==="ready"?"Tap right to start":"Tap right to resume · tap left to reset");
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);if(state.phase==="ready")build();else draw()});
+    $("zright").addEventListener("click",start);
+    $("zleft").addEventListener("click",function(){if(tick){clearInterval(tick);tick=null}build()});
+    xemd.ready();$("wrap").style.display="flex";build();
+  })();
+</script></body></html>

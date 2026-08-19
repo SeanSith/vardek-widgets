@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Disk</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--text-mid:#8089a6;--text-dim:#565f89;--mono:ui-monospace,'SF Mono',Menlo,monospace;
+    --ok:#7aa2f7;--warn:#e0af68;--full:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;flex-direction:column;height:100vh;padding:22px 28px;gap:8px}
+  .head{display:flex;align-items:center;gap:10px;margin-bottom:6px}.head h1{font-size:1.2rem;font-weight:700}.head .sp{flex:1}.head .upd{font-family:var(--mono);font-size:.76rem;color:var(--text-dim)}
+  #list{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:22px}
+  .vol .top{display:flex;align-items:baseline;gap:10px}
+  .vol .nm{font-size:1.5rem;font-weight:600}.vol .nm .ic{margin-right:8px}
+  .vol .pct{margin-left:auto;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:1.9rem}
+  .vol .bar{height:16px;border-radius:8px;background:var(--surface);border:1px solid var(--border);overflow:hidden;margin-top:8px}
+  .vol .bar>div{height:100%;border-radius:8px;transform-origin:left center;transition:transform .5s,background .4s}
+  .vol.ok .bar>div{background:var(--ok)}.vol.ok .pct{color:var(--ok)}
+  .vol.warn .bar>div{background:var(--warn)}.vol.warn .pct{color:var(--warn)}
+  .vol.full .bar>div{background:var(--full)}.vol.full .pct{color:var(--full)}
+  .vol .meta{display:flex;gap:16px;font-family:var(--mono);font-size:.85rem;color:var(--text-mid);margin-top:7px}
+  .vol .meta b{color:var(--text)}.vol .meta .free{color:var(--text-dim)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">Waiting for diskd…</div>
+  <div id="wrap" style="display:none"><div class="head"><span style="font-size:1.3rem">💾</span><h1>Storage</h1><span class="sp"></span><span class="upd" id="upd"></span></div><div id="list"></div></div>
+<script>
+(function(){
+  "use strict";
+  var $=function(i){return document.getElementById(i)};
+  function gb(n){var t=n/1e12;if(t>=1)return t.toFixed(t<10?2:1)+" TB";return Math.round(n/1e9)+" GB"}
+  function cls(p){return p>=90?"full":p>=70?"warn":"ok"}
+  function render(d){
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+    var vols=d.volumes||[],list=$("list");list.innerHTML="";
+    vols.forEach(function(v){
+      var el=document.createElement("div");el.className="vol "+cls(v.pct);
+      el.innerHTML='<div class="top"><div class="nm"><span class="ic">'+(v.kind==="external"?"🔌":"💽")+'</span>'+esc(v.name)+'</div><div class="pct">'+v.pct+'%</div></div>'
+        +'<div class="bar"><div style="width:100%;transform:scaleX('+Math.max(0.01,v.pct/100)+')"></div></div>'
+        +'<div class="meta"><span><b>'+gb(v.used)+'</b> used</span><span class="free"><b>'+gb(v.avail)+'</b> free</span><span class="free">'+gb(v.total)+' total</span></div>';
+      list.appendChild(el);
+    });
+    $("upd").textContent=vols.length+" volume"+(vols.length!==1?"s":"");
+  }
+  function esc(s){return String(s).replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function load(){var s=document.createElement("script");s.src="data.js?v="+Date.now();s.onload=function(){s.remove();if(window.__DISK__)render(window.__DISK__)};s.onerror=function(){s.remove();$("boot").textContent="diskd not running — see README"};document.head.appendChild(s)}
+  if(window.Vardek&&Vardek.onRefresh)Vardek.onRefresh(load);
+  load();setInterval(load,60000);
+})();
+</script></body></html>

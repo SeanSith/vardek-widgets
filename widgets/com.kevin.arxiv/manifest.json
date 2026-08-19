@@ -1,0 +1,48 @@
+{
+  "id": "com.kevin.arxiv",
+  "name": "arXiv",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 900,
+  "permissions": {
+    "proxy": [
+      "https://export.arxiv.org/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "query": {
+      "type": "string",
+      "label": "arXiv query (e.g. cat:cs.AI or all:llm)",
+      "default": "cat:cs.AI"
+    },
+    "count": {
+      "type": "number",
+      "label": "Papers to show (max 20)",
+      "default": 12
+    }
+  }
+}

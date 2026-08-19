@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Control</title>
+<style>
+  /* Cockpit tokens (DESIGN.md): Tokyo Night surfaces, Panel Indigo accent,
+     SF Mono for live values; amber = needs you, red = dead/failed, green = running. */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #11151f; --surface: #161b28; --surface-2: #1b2130; --border: #2a3350;
+    --text: #e6e9ef; --text-mid: #8089a6; --text-dim: #565f89;
+    --accent: #7aa2f7; --accent-2: #bb9af7; --green: #9ece6a; --yellow: #e0af68; --red: #f7768e; --cyan: #7dcfff;
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  button { font-family: inherit; color: inherit; -webkit-user-select: none; user-select: none; }
+
+  /* ── shared button (44px touch floor) ─────────────────────────────── */
+  .btn { min-height: 44px; min-width: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--border);
+         background: var(--bg); color: var(--text); font-size: .95rem; font-weight: 600; cursor: pointer;
+         display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;
+         transition: transform .08s, border-color .08s, background .08s; }
+  .btn .i { font-size: 1.15rem; line-height: 1; }
+  .btn:active, .btn.pressed { transform: scale(.95); border-color: var(--accent); background: var(--surface); }
+  .btn.ok { border-color: var(--green); } .btn.fail { border-color: var(--red); }
+  .btn.primary { border-color: rgba(224,175,104,.55); background: rgba(224,175,104,.10); color: var(--yellow); }
+  .btn.ghost { color: var(--text-mid); }
+  .btn.danger:active { border-color: var(--red); }
+  .btn.sq { padding: 0; width: 44px; }
+  .btn:disabled { opacity: .35; pointer-events: none; }
+
+  /* ── console layout ───────────────────────────────────────────────── */
+  #console { display: grid; grid-template-columns: 500px minmax(0, 1fr) 460px; gap: 14px; padding: 14px; height: 100vh; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px 14px;
+           display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+  .ph { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; min-height: 44px; }
+  .ph h2 { font-size: .875rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+  .ph .sub { font-family: var(--mono); font-size: .875rem; color: var(--text-dim); }
+  .ph .sp { flex: 1; }
+  .chip { font-family: var(--mono); font-size: .8rem; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-mid); white-space: nowrap; }
+  .chip.wait { color: var(--yellow); border-color: rgba(224,175,104,.45); }
+  .chip.run { color: var(--green); border-color: rgba(158,206,106,.45); }
+
+  /* apps */
+  #apps { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 10px; flex: 1; min-height: 0; }
+  .tile { position: relative; background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 12px 12px 10px;
+          display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; cursor: pointer;
+          min-height: 0; transition: transform .08s, border-color .08s; text-align: left; }
+  .tile:active, .tile.pressed { transform: scale(.97); border-color: var(--accent); }
+  .tile.ok { border-color: var(--green); } .tile.fail { border-color: var(--red); }
+  .tile.front { border-color: var(--accent); box-shadow: inset 0 0 0 1px rgba(122,162,247,.35); }
+  .tile .ic { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+              font-size: 1.6rem; color: var(--text-mid); background: var(--surface-2); overflow: hidden; }
+  .tile .ic img { width: 44px; height: 44px; display: block; }
+  .tile.off .ic { filter: grayscale(1) brightness(.75); }
+  .tile .nm { font-size: 1.05rem; font-weight: 600; margin-top: 8px; }
+  .tile .st { font-family: var(--mono); font-size: .8rem; color: var(--text-dim); display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .tile.on .st { color: var(--green); }
+  .tile.front .st { color: var(--accent); }
+  .tile .quit { position: absolute; top: 8px; right: 8px; width: 40px; height: 40px; border-radius: 10px; border: 1px solid transparent;
+                background: transparent; color: var(--text-dim); font-size: 1.2rem; cursor: pointer; display: none; align-items: center; justify-content: center; }
+  .tile.on .quit { display: flex; }
+  .tile .quit:active, .tile .quit.pressed { border-color: var(--red); color: var(--red); background: rgba(247,118,142,.1); }
+
+  /* sessions */
+  #slist { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 8px; padding-right: 2px; }
+  #slist::-webkit-scrollbar { width: 6px; } #slist::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .row { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 8px 12px 8px 10px;
+         background: var(--bg); border: 1px solid var(--border); border-radius: 12px; min-height: 70px; }
+  .row.waiting { border-color: rgba(224,175,104,.55); background: rgba(224,175,104,.05); }
+  .row.dead { opacity: .75; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-dim); justify-self: center; }
+  .row.waiting .dot { background: var(--yellow); animation: pulse 1.6s ease-in-out infinite; }
+  .row.running .dot { background: var(--green); }
+  .row.idle .dot { background: var(--accent); }
+  .row.error .dot, .row.dead .dot { background: var(--red); opacity: .6; }
+  @keyframes pulse { 0%,100% { transform: scale(1); opacity: 1 } 50% { transform: scale(1.35); opacity: .7 } }
+  .meta { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .l1 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .l1 .t { font-size: 1.05rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .l1 .g { font-family: var(--mono); font-size: .8rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .l1 .tool { font-family: var(--mono); font-size: .75rem; color: var(--text-mid); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; flex-shrink: 0; }
+  .l2 { font-family: var(--mono); font-size: .85rem; color: var(--text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row.waiting .l2 { color: var(--text); }
+  .l2 .s2 { color: var(--text-dim); }
+  .acts { display: flex; gap: 6px; align-items: center; }
+  .acts .btn { min-height: 48px; padding: 0 14px; font-size: .95rem; }
+  .acts .btn:active, .acts .btn.pressed { transform: scale(.98); }
+  .divider { display: flex; align-items: center; gap: 10px; color: var(--text-dim); font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; margin-top: 6px; }
+  .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .row.stopped { min-height: 52px; grid-template-columns: 14px minmax(0,1fr) auto; padding: 6px 10px; }
+  .row.stopped .l1 .t { font-size: .95rem; font-weight: 500; }
+  .empty { color: var(--text-dim); font-size: .95rem; padding: 18px 8px; text-align: center; }
+  .err { color: var(--red); font-family: var(--mono); font-size: .8rem; }
+
+  /* processes + custom buttons */
+  #procs { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; min-height: 0; max-height: 46%; }
+  .prow { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 8px 12px; background: var(--bg);
+          border: 1px solid var(--border); border-radius: 10px; }
+  .prow .pn { font-size: .95rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .prow .pn .pd { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+  .prow .pc { font-family: var(--mono); font-size: .8rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prow .pe { font-family: var(--mono); font-size: .9rem; color: var(--text-mid); }
+  #custom { display: grid; gap: 8px; margin-top: 8px; flex: 1; min-height: 0; align-content: start; }
+  #custom .btn { min-height: 56px; flex-direction: column; gap: 4px; padding: 6px 8px; }
+  #custom .btn .i { font-size: 1.4rem; } #custom .btn .lb { font-size: .8rem; font-weight: 500; color: var(--text-mid); }
+  .hint { color: var(--text-dim); font-size: .85rem; padding: 10px 6px; line-height: 1.5; }
+  #toast { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 20; font-family: var(--mono); font-size: .9rem;
+           padding: 10px 16px; border-radius: 10px; border: 1px solid var(--red); color: var(--red); background: rgba(24,16,16,.95); display: none; max-width: 70%; }
+  #toast.ok { border-color: var(--green); color: var(--green); background: rgba(16,24,16,.95); }
+  #toast.show { display: block; }
+  .foot { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); font-family: var(--mono); font-size: .8rem; color: var(--text-dim);
+          display: flex; justify-content: space-between; gap: 8px; }
+  body.stale .foot .upd { color: var(--yellow); }
+
+  /* ── buttons mode (stock Macro Pad parity) ─────────────────────────── */
+  #pad { display: none; grid-gap: 10px; gap: 10px; padding: 10px; height: 100%; }
+  #pad button.action { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 14px; font-size: 20px; font-weight: 600;
+    cursor: pointer; padding: 6px 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 0;
+    transition: transform .08s, border-color .08s, background .08s; }
+  #pad button.action .icon { font-size: 30px; line-height: 1; } #pad button.action .label { font-size: 15px; font-weight: 500; color: var(--text-mid); }
+  #pad button.action:active, #pad button.action.pressed { transform: scale(.95); border-color: var(--accent); background: var(--surface); }
+  #pad button.action.ok { border-color: var(--green); } #pad button.action.fail { border-color: var(--red); }
+  #pad #empty { color: var(--text-dim); font-size: 14px; display: flex; height: 100%; align-items: center; justify-content: center; text-align: center; padding: 12px; grid-column: 1 / -1; }
+  body.buttons #console { display: none; } body.buttons #pad { display: grid; }
+
+  /* ── responsive console ────────────────────────────────────────────── */
+  @media (max-width: 2100px) { #console { grid-template-columns: 420px minmax(0,1fr) 400px; } #apps { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 1700px) {
+    #console { grid-template-columns: 300px minmax(0,1fr); }
+    #right { display: none; }
+    #apps { grid-template-columns: 1fr; grid-auto-rows: auto; }
+    .tile { flex-direction: row; align-items: center; justify-content: flex-start; gap: 12px; padding: 8px 52px 8px 10px; min-height: 60px; }
+    .tile .nm { margin-top: 0; } .tile .st { display: none; } .tile .quit { top: 50%; transform: translateY(-50%); }
+    .tile.on .nm::after { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-left: 8px; vertical-align: middle; }
+    .tile.front .nm::after { background: var(--accent); }
+    .tile .ic, .tile .ic img { width: 36px; height: 36px; }
+    .acts .btn.lbl .tx { display: none; } .acts .btn.lbl { padding: 0 12px; }
+  }
+  body.no-procs #procs, body.no-procs #procs-h { display: none; }
+</style>
+</head>
+<body>
+  <div id="console">
+    <section class="panel" id="left">
+      <div class="ph"><h2>Desktop apps</h2><span class="sub" id="apps-sub"></span></div>
+      <div id="apps"></div>
+    </section>
+    <section class="panel" id="mid">
+      <div class="ph"><h2>Agent sessions</h2><span id="counts" style="display:flex;gap:6px"></span><span class="sp"></span>
+        <button class="btn ghost" id="btn-tui" data-action="agentctl.tui"><span class="i">▦</span><span>Agent Deck</span></button>
+        <button class="btn ghost sq" id="btn-refresh" data-action="agentctl.refresh" title="Refresh"><span class="i">↻</span></button>
+      </div>
+      <div id="slist"></div>
+    </section>
+    <section class="panel" id="right">
+      <div class="ph" id="procs-h"><h2>CLI processes</h2><span class="sub" id="procs-sub"></span></div>
+      <div id="procs"></div>
+      <div class="ph" style="margin-top:14px"><h2>Buttons</h2><span class="sub" id="custom-sub"></span></div>
+      <div id="custom"></div>
+      <div class="foot"><span class="upd" id="upd">—</span><span id="aderr" class="err"></span></div>
+    </section>
+  </div>
+  <div id="pad"></div>
+  <div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  var settings = {}, catalog = [], data = null, ready = false;
+  var pending = {};   // actionId -> element awaiting result
+  var PREFIX = "agentctl.";
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ── helpers ────────────────────────────────────────────────────────
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function shortPath(p) { if (!p) return ""; return p.replace(/^\/Users\/[^/]+/, "~"); }
+  function fmtEtime(s) {  // ps etime: [[dd-]hh:]mm:ss
+    if (!s) return "";
+    var d = 0, parts = s.split("-"); if (parts.length === 2) { d = +parts[0]; s = parts[1]; }
+    var t = s.split(":").map(Number), h = 0, m = 0;
+    if (t.length === 3) { h = t[0]; m = t[1]; } else if (t.length === 2) { m = t[0]; }
+    if (d) return d + "d " + h + "h"; if (h) return h + "h " + String(m).padStart(2, "0") + "m"; return m + "m";
+  }
+  function ago(iso) { if (!iso) return "—"; var ms = Date.now() - Date.parse(iso); if (ms < 5000) return "just now"; if (ms < 60000) return Math.floor(ms / 1000) + "s ago"; return Math.floor(ms / 60000) + "m ago"; }
+  function mode() {
+    var m = settings.mode || "auto";
+    if (m === "console") return "console"; if (m === "buttons") return "buttons";
+    return window.innerWidth < 1000 ? "buttons" : "console";
+  }
+  function canAct() { return !!(window.Vardek && Vardek.runAction && ready); }
+  function fire(id, btn) {
+    if (!canAct()) return;
+    btn.classList.add("pressed");
+    pending[id] = btn;
+    Vardek.runAction(id);
+    setTimeout(function () { if (pending[id] === btn) { btn.classList.remove("pressed"); delete pending[id]; } }, 8000);
+  }
+  var toastTimer = null;
+  function toast(msg, ok) {
+    var t = $("toast"); t.textContent = msg; t.className = "show" + (ok ? " ok" : "");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.className = ""; }, ok ? 1800 : 6000);
+  }
+  document.addEventListener("vardek:action-result", function (ev) {
+    var id = ev.detail.id, btn = pending[id];
+    if (btn) { btn.classList.remove("pressed"); btn.classList.add(ev.detail.ok ? "ok" : "fail"); setTimeout(function () { btn.classList.remove("ok", "fail"); }, 900); delete pending[id]; }
+    if (!ev.detail.ok) toast("action rejected by Vardek (" + id.replace(PREFIX, "") + ") — not registered yet? tap ↻ and retry; details in ~/Library/Logs/agentctl.log");
+    else if (/\.(ad\.(start|stop|restart|open)|tui)\./.test(id + ".") || /\.(open|tui)$/.test(id)) toast("running…", true);
+    setTimeout(load, 1200); setTimeout(load, 4000);
+  });
+  function actionBtn(id, icon, label, cls) {
+    var b = el("button", "btn " + (cls || "") + (label ? " lbl" : " sq"));
+    b.dataset.action = id;
+    b.appendChild(el("span", "i", icon));
+    if (label) b.appendChild(el("span", "tx", label));
+    b.addEventListener("click", function () { fire(id, b); });
+    return b;
+  }
+
+  // ── console render ─────────────────────────────────────────────────
+  var lastAppsSig = null;
+  function renderApps() {
+    var box = $("apps");
+    var sig = JSON.stringify(((data && data.apps) || []).map(function (a) { return [a.key, a.running, a.frontmost, a.name]; }));
+    if (sig === lastAppsSig && box.childElementCount) return;
+    lastAppsSig = sig;
+    box.textContent = "";
+    var apps = (data && data.apps) || [], on = 0;
+    apps.forEach(function (a) {
+      var t = el("button", "tile " + (a.running ? "on" : "off") + (a.frontmost ? " front" : ""));
+      var ic = el("div", "ic");
+      if (a.icon) { var img = el("img"); img.src = a.icon + "?v=1"; img.alt = ""; ic.appendChild(img); } else ic.textContent = a.emoji || "▶";
+      t.appendChild(ic);
+      var body = el("div"); body.appendChild(el("div", "nm", a.name));
+      body.appendChild(el("div", "st", a.frontmost ? "● front" : a.running ? "● running" : "○ not running"));
+      t.appendChild(body);
+      t.addEventListener("click", function () { fire(PREFIX + "app.focus." + a.key, t); });
+      var q = el("button", "quit", "×"); q.title = "Quit " + a.name;
+      q.addEventListener("click", function (ev) { ev.stopPropagation(); fire(PREFIX + "app.quit." + a.key, q); });
+      t.appendChild(q);
+      box.appendChild(t);
+      if (a.running) on++;
+    });
+    $("apps-sub").textContent = apps.length ? on + " running" : "none configured";
+  }
+
+  function sessionRow(s, stopped) {
+    var r = el("div", "row " + (stopped ? "stopped dead" : (s.alive ? s.status : "dead")));
+    r.appendChild(el("span", "dot"));
+    var meta = el("div", "meta"), l1 = el("div", "l1");
+    l1.appendChild(el("span", "t", s.title));
+    if (s.tool) l1.appendChild(el("span", "tool", s.tool));
+    l1.appendChild(el("span", "g", (s.group ? s.group + "  " : "") + shortPath(s.path)));
+    meta.appendChild(l1);
+    if (!stopped) {
+      var l2 = el("div", "l2");
+      var snip = s.snippet || [];
+      if (snip.length) { l2.textContent = snip[snip.length - 1]; if (snip.length > 1) { l2.insertBefore(el("span", "s2", snip[0] + "  ›  "), l2.firstChild); } }
+      else l2.textContent = s.alive ? (s.status === "waiting" ? "waiting for input" : s.status) : "tmux session gone";
+      meta.appendChild(l2);
+    }
+    r.appendChild(meta);
+    var acts = el("div", "acts");
+    if (stopped) {
+      acts.appendChild(actionBtn(PREFIX + "ad.start." + s.id, "▶", "Start", "ghost"));
+    } else {
+      acts.appendChild(actionBtn(PREFIX + "ad.enter." + s.id, "⏎", "Approve", s.status === "waiting" ? "primary" : "ghost"));
+      acts.appendChild(actionBtn(PREFIX + "ad.esc." + s.id, "⎋", null, "ghost"));
+      acts.appendChild(actionBtn(PREFIX + "ad.open." + s.id, "⌨", null, "ghost"));
+      acts.appendChild(actionBtn(PREFIX + "ad.restart." + s.id, "↻", null, "ghost"));
+      acts.appendChild(actionBtn(PREFIX + "ad.stop." + s.id, "■", null, "ghost danger"));
+    }
+    r.appendChild(acts);
+    return r;
+  }
+
+  var lastSessionsSig = null;
+  function renderSessions() {
+    var list = $("slist");
+    var sig = JSON.stringify(((data && data.sessions) || []).map(function (s) { return [s.id, s.status, s.alive, s.snippet, s.title]; })) + (settings.showStopped === false);
+    if (sig === lastSessionsSig && list.childElementCount) return;   // nothing changed: leave the DOM (and any mid-tap button) alone
+    lastSessionsSig = sig;
+    list.textContent = "";
+    var ss = (data && data.sessions) || [];
+    var live = ss.filter(function (s) { return s.alive; }), dead = ss.filter(function (s) { return !s.alive; });
+    var c = (data && data.sessionCounts) || {};
+    var counts = $("counts"); counts.textContent = "";
+    if (c.waiting) counts.appendChild(el("span", "chip wait", c.waiting + " waiting"));
+    if (c.running) counts.appendChild(el("span", "chip run", c.running + " running"));
+    if (c.idle) counts.appendChild(el("span", "chip", c.idle + " idle"));
+    if (dead.length) counts.appendChild(el("span", "chip", dead.length + " stopped"));
+    if (!ss.length) { list.appendChild(el("div", "empty", data && data.agentDeckError ? "agent-deck: " + data.agentDeckError : "No agent-deck sessions.")); return; }
+    if (!live.length) list.appendChild(el("div", "empty", "No live sessions — start one below."));
+    live.forEach(function (s) { list.appendChild(sessionRow(s, false)); });
+    if (dead.length && settings.showStopped !== false) {
+      list.appendChild(el("div", "divider", "Stopped · " + dead.length));
+      dead.forEach(function (s) { list.appendChild(sessionRow(s, true)); });
+    }
+    $("aderr").textContent = data && data.agentDeckError ? data.agentDeckError : "";
+  }
+
+  function renderProcs() {
+    var box = $("procs"); box.textContent = "";
+    var ps = (data && data.processes) || [];
+    document.body.classList.toggle("no-procs", settings.showProcesses === false);
+    ps.forEach(function (p) {
+      var r = el("div", "prow"), left = el("div");
+      var pn = el("div", "pn"); pn.appendChild(el("span", "pd")); pn.appendChild(document.createTextNode(p.name)); left.appendChild(pn);
+      left.appendChild(el("div", "pc", shortPath(p.cwd) || ("pid " + p.pid)));
+      r.appendChild(left); r.appendChild(el("span", "pe", fmtEtime(p.elapsed)));
+      box.appendChild(r);
+    });
+    $("procs-sub").textContent = ps.length ? ps.length + " live" : "none";
+  }
+
+  function customActions() {
+    var filter = (settings.actions || "").split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+    var mine = catalog.filter(function (a) { return String(a.id).indexOf(PREFIX) !== 0; });
+    if (!filter.length) return mine;
+    return filter.map(function (id) { return catalog.find(function (a) { return a.id === id; }) || { id: id, missing: true }; });
+  }
+  var lastCustomSig = null;
+  function renderCustom() {
+    var box = $("custom");
+    var acts = customActions();
+    var sig = JSON.stringify(acts.map(function (a) { return [a.id, a.label, a.icon, !!a.missing]; })) + (settings.columns || 0);
+    if (sig === lastCustomSig && box.childElementCount) return;
+    lastCustomSig = sig;
+    box.textContent = "";
+    $("custom-sub").textContent = acts.length ? acts.length + "" : "";
+    if (!acts.length) { box.appendChild(el("div", "hint", "No custom buttons yet. Add them in Admin → Widgets → Agent Control → Buttons.")); return; }
+    var cols = Number(settings.columns) || Math.min(3, Math.max(2, acts.length));
+    box.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
+    acts.forEach(function (a) {
+      var b = el("button", "btn"); b.disabled = !!a.missing; b.dataset.action = a.id;
+      b.appendChild(el("span", "i", a.icon || "▶")); b.appendChild(el("span", "lb", a.label || a.id));
+      b.addEventListener("click", function () { fire(a.id, b); });
+      box.appendChild(b);
+    });
+  }
+
+  // ── buttons mode (stock macro pad behaviour) ───────────────────────
+  function renderPad() {
+    var pad = $("pad"); pad.textContent = "";
+    var acts = customActions();
+    if (!acts.length) { var e = el("div", null, ""); e.id = "empty"; e.textContent = "No buttons yet. Add them in Admin → Widgets → Agent Control."; pad.appendChild(e); pad.style.gridTemplateColumns = "1fr"; return; }
+    var columns = Number(settings.columns) || 0;
+    if (!columns) columns = Math.min(acts.length, Math.max(2, Math.ceil(acts.length / 2)));
+    pad.style.gridTemplateColumns = "repeat(" + columns + ", 1fr)";
+    acts.forEach(function (a) {
+      var b = el("button", "action"); b.disabled = !!a.missing; if (a.missing) b.style.opacity = ".35";
+      b.appendChild(el("span", "icon", a.icon || "▶")); b.appendChild(el("span", "label", a.label || a.id));
+      b.dataset.action = a.id; b.addEventListener("click", function () { fire(a.id, b); });
+      pad.appendChild(b);
+    });
+  }
+
+  function render() {
+    var m = mode();
+    document.body.classList.toggle("buttons", m === "buttons");
+    if (m === "buttons") { renderPad(); return; }
+    renderApps(); renderSessions(); renderProcs(); renderCustom();
+    $("upd").textContent = data ? "updated " + ago(data.generatedAt) : "waiting for agentctl…";
+    document.body.classList.toggle("stale", !!(data && Date.now() - Date.parse(data.generatedAt) > 60000));
+    var dis = !canAct();
+    document.querySelectorAll("[data-action]").forEach(function (b) { if (dis) b.setAttribute("disabled", ""); else b.removeAttribute("disabled"); });
+  }
+
+  // ── data: JSONP file written by agentctl serve ─────────────────────
+  var lastLoad = 0;
+  function load() {
+    if (Date.now() - lastLoad < 1500) return;
+    lastLoad = Date.now();
+    var s = document.createElement("script");
+    s.src = "data.js?v=" + Date.now();
+    s.onload = function () { s.remove(); if (window.__AGENTCTL__) { data = window.__AGENTCTL__; render(); } };
+    s.onerror = function () { s.remove(); if (!data) { $("upd").textContent = "agentctl not running — see README"; } };
+    document.head.appendChild(s);
+  }
+
+  function boot() {
+    if (window.Vardek) { settings = Vardek.settings || {}; catalog = Vardek.actions || []; ready = Vardek.ready; }
+    render(); load();
+  }
+  // header buttons are static markup — wire them once
+  ["btn-tui", "btn-refresh"].forEach(function (id) {
+    var b = $(id); b.addEventListener("click", function () { fire(b.dataset.action, b); });
+  });
+  document.addEventListener("vardek:ready", boot);
+  if (window.Vardek && Vardek.ready) boot(); else setTimeout(function () { if (!ready) boot(); }, 1500);
+  if (window.Vardek && Vardek.onResize) Vardek.onResize(function () { render(); });
+  window.addEventListener("resize", render);
+  setInterval(load, 4000);
+  setInterval(function () { if (data && mode() === "console") { $("upd").textContent = "updated " + ago(data.generatedAt); document.body.classList.toggle("stale", Date.now() - Date.parse(data.generatedAt) > 60000); } }, 5000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{
+  "id": "com.kevin.agent-standup",
+  "name": "AI Standup",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "refreshInterval": 60,
+  "permissions": {
+    "proxy": [],
+    "secrets": []
+  },
+  "settingsSchema": {
+    "showRunning": {
+      "type": "boolean",
+      "label": "Show running / idle line",
+      "default": true
+    },
+    "showCost": {
+      "type": "boolean",
+      "label": "Show model cost in footer",
+      "default": true
+    }
+  }
+}

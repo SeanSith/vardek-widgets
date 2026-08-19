@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sorting Visualizer</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#080a10;font-family:ui-monospace,Menlo,monospace}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block}
+#lbl{position:absolute;left:22px;top:16px;color:#8089a6;font-size:1rem;letter-spacing:.05em}#lbl b{color:#e6e9ef}
+#lbl .st{font-size:.78rem;color:#565f89}</style></head>
+<body><canvas id="c"></canvas><div id="lbl"><b id="algo">—</b><div class="st" id="stat"></div></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={bars:80,speed:4};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d"),W,H,dpr;
+  var arr=[],steps=[],sp=0,hi={},algo="",comps=0,swaps=0,phase="sort",sweep=0,algoIdx=0;
+  var ALGOS=["Bubble sort","Insertion sort","Selection sort","Quicksort","Heapsort","Merge sort"];
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;newRun()}
+  function shuffled(n){var a=[];for(var i=0;i<n;i++)a.push(i+1);for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
+  // recorders push steps: ['cmp',i,j] ['swap',i,j] ['set',i,val]
+  function recBubble(a,S){for(var i=0;i<a.length;i++)for(var j=0;j<a.length-i-1;j++){S.push(['cmp',j,j+1]);if(a[j]>a[j+1]){var t=a[j];a[j]=a[j+1];a[j+1]=t;S.push(['swap',j,j+1])}}}
+  function recInsert(a,S){for(var i=1;i<a.length;i++){var k=a[i],j=i-1;while(j>=0){S.push(['cmp',j,i]);if(a[j]>k){a[j+1]=a[j];S.push(['set',j+1,a[j]]);j--}else break}a[j+1]=k;S.push(['set',j+1,k])}}
+  function recSelect(a,S){for(var i=0;i<a.length;i++){var m=i;for(var j=i+1;j<a.length;j++){S.push(['cmp',m,j]);if(a[j]<a[m])m=j}if(m!==i){var t=a[i];a[i]=a[m];a[m]=t;S.push(['swap',i,m])}}}
+  function recQuick(a,S){function part(lo,hi){var p=a[hi],i=lo;for(var j=lo;j<hi;j++){S.push(['cmp',j,hi]);if(a[j]<p){var t=a[i];a[i]=a[j];a[j]=t;S.push(['swap',i,j]);i++}}var t2=a[i];a[i]=a[hi];a[hi]=t2;S.push(['swap',i,hi]);return i}function qs(lo,hi){if(lo<hi){var p=part(lo,hi);qs(lo,p-1);qs(p+1,hi)}}qs(0,a.length-1)}
+  function recHeap(a,S){var n=a.length;function sift(i,sz){while(true){var l=2*i+1,r=2*i+2,m=i;if(l<sz){S.push(['cmp',m,l]);if(a[l]>a[m])m=l}if(r<sz){S.push(['cmp',m,r]);if(a[r]>a[m])m=r}if(m===i)break;var t=a[i];a[i]=a[m];a[m]=t;S.push(['swap',i,m]);i=m}}for(var i=Math.floor(n/2)-1;i>=0;i--)sift(i,n);for(var e=n-1;e>0;e--){var t=a[0];a[0]=a[e];a[e]=t;S.push(['swap',0,e]);sift(0,e)}}
+  function recMerge(a,S){function ms(lo,hi){if(hi-lo<1)return;var mid=(lo+hi)>>1;ms(lo,mid);ms(mid+1,hi);var tmp=[],i=lo,j=mid+1;while(i<=mid&&j<=hi){S.push(['cmp',i,j]);if(a[i]<=a[j])tmp.push(a[i++]);else tmp.push(a[j++])}while(i<=mid)tmp.push(a[i++]);while(j<=hi)tmp.push(a[j++]);for(var k=0;k<tmp.length;k++){a[lo+k]=tmp[k];S.push(['set',lo+k,tmp[k]])}}ms(0,a.length-1)}
+  var REC=[recBubble,recInsert,recSelect,recQuick,recHeap,recMerge];
+  function newRun(){
+    var n=Math.max(16,Math.min(240,Math.round(Number(settings.bars)||80)));
+    arr=shuffled(n);var work=arr.slice();steps=[];REC[algoIdx](work,steps);sp=0;comps=0;swaps=0;hi={};algo=ALGOS[algoIdx];phase="sort";sweep=0;
+  }
+  function draw(){
+    ctx.fillStyle="#080a10";ctx.fillRect(0,0,W,H);
+    var n=arr.length,bw=W/n,base=H-8*dpr;
+    for(var i=0;i<n;i++){var v=arr[i],h=(v/n)*(H-30*dpr);
+      var hue=(v/n)*280;var col="hsl("+hue+",70%,55%)";
+      if(phase==="sweep"&&i<=sweep)col="hsl("+hue+",85%,62%)";
+      if(hi[i]==="cmp")col="#ffffff";if(hi[i]==="swap")col="#f7768e";
+      ctx.fillStyle=col;ctx.fillRect(i*bw,base-h,Math.max(1,bw-1*dpr),h);
+    }
+    document.getElementById("algo").textContent=algo;
+    document.getElementById("stat").textContent=phase==="sweep"?"sorted ✓":(comps+" comparisons · "+swaps+" swaps");
+  }
+  function frame(){
+    if(phase==="sort"){
+      hi={};var per=Math.max(1,Math.round(Number(settings.speed)||4));
+      for(var s=0;s<per&&sp<steps.length;s++){var st=steps[sp++];
+        if(st[0]==="cmp"){comps++;hi[st[1]]="cmp";hi[st[2]]="cmp"}
+        else if(st[0]==="swap"){swaps++;var t=arr[st[1]];arr[st[1]]=arr[st[2]];arr[st[2]]=t;hi[st[1]]="swap";hi[st[2]]="swap"}
+        else if(st[0]==="set"){arr[st[1]]=st[2];hi[st[1]]="swap"}}
+      if(sp>=steps.length){phase="sweep";sweep=-1}
+    }else if(phase==="sweep"){sweep+=Math.max(2,Math.round(arr.length/40));if(sweep>=arr.length){phase="hold";sweep=0}}
+    else if(phase==="hold"){sweep++;if(sweep>90){algoIdx=(algoIdx+1)%REC.length;newRun()}}
+    draw();requestAnimationFrame(frame);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);newRun()});
+    xemd.ready();resize();requestAnimationFrame(frame);window.addEventListener("resize",resize);
+  })();
+</script></body></html>

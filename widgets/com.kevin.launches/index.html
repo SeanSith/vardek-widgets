@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Rocket Launches</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--go:#9ece6a;--tbd:#e0af68;--hold:#f7768e;--info:#7aa2f7}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;height:100vh;padding:24px 30px;gap:30px}
+  .hero{flex:0 0 46%;min-width:0;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--border);padding-right:28px}
+  .hero .lbl{font-size:.82rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:8px}
+  .pill{font-family:var(--mono);font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.03em}
+  .hero .cd{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:3.9rem;line-height:1;margin:8px 0 4px}
+  .hero .mission{font-size:1.6rem;font-weight:700;line-height:1.15;margin-top:4px}
+  .hero .rocket{font-size:1.1rem;color:var(--info);margin-top:3px}
+  .hero .meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+  .hero .chip{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:.85rem;color:var(--mid)}
+  .hero .chip b{color:var(--text);font-weight:600}
+  .list{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:5px}
+  .list .h{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+  .row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:8px 4px}
+  .row+.row{border-top:1px solid rgba(42,51,80,.5)}
+  .row .m{min-width:0}
+  .row .nm{font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .sub{font-family:var(--mono);font-size:.78rem;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .when{font-family:var(--mono);font-size:.9rem;color:var(--mid);text-align:right;white-space:nowrap}
+  #status{position:fixed;left:30px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--hold)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+  @media(max-width:820px){#wrap{flex-direction:column;padding:16px;gap:12px}.hero{flex:0 0 auto;border-right:none;border-bottom:1px solid var(--border);padding-right:0;padding-bottom:12px}.hero .cd{font-size:2.6rem}}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="hero">
+      <div class="lbl">Next launch <span class="pill" id="pill"></span></div>
+      <div class="cd" id="cd">T– —</div>
+      <div class="mission" id="mission"></div>
+      <div class="rocket" id="rocket"></div>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="list"><div class="h">Upcoming</div><div id="rows"></div></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var $=function(i){return document.getElementById(i)}, last=0, launches=null, tick=null;
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function statusCls(a){a=(a||"").toUpperCase();if(a==="GO")return"go";if(a==="TBD"||a==="TBC")return"tbd";if(a.indexOf("HOLD")>=0)return"hold";return"info"}
+  function statusColor(a){return{go:"#9ece6a",tbd:"#e0af68",hold:"#f7768e",info:"#7aa2f7"}[statusCls(a)]}
+  function split(name){var i=name.indexOf(" | ");return i<0?[name,""]:[name.slice(0,i),name.slice(i+3)]}
+  function cd(ms){
+    if(ms<=0)return"T+ "+cdstr(-ms);
+    return"T– "+cdstr(ms);
+  }
+  function cdstr(ms){var s=Math.floor(ms/1000),d=Math.floor(s/86400);s%=86400;var h=Math.floor(s/3600);s%=3600;var m=Math.floor(s/60);s%=60;
+    function p(n){return String(n).padStart(2,"0")}
+    return (d>0?d+"d ":"")+p(h)+":"+p(m)+":"+p(s)}
+  function whenStr(net){var ms=new Date(net)-Date.now();if(ms<0)return"now";var s=ms/1000;
+    if(s<3600)return Math.round(s/60)+"m";if(s<86400)return Math.round(s/3600)+"h";return Math.round(s/86400)+"d"}
+  function heroIndex(){var now=Date.now();for(var i=0;i<launches.length;i++){if(new Date(launches[i].net).getTime()>now)return i}return 0}
+  function render(){
+    var hi=heroIndex(), l0=launches[hi], nm=split(l0.name);
+    $("pill").textContent=(l0.status&&l0.status.abbrev)||"TBD";$("pill").style.background=statusColor(l0.status&&l0.status.abbrev)+"22";$("pill").style.color=statusColor(l0.status&&l0.status.abbrev);
+    $("mission").textContent=nm[1]||nm[0];
+    $("rocket").textContent=nm[1]?nm[0]:((l0.rocket&&l0.rocket.configuration&&l0.rocket.configuration.name)||"");
+    var prov=(l0.launch_service_provider&&l0.launch_service_provider.name)||"";
+    var pad=(l0.pad&&((l0.pad.location&&l0.pad.location.name)||l0.pad.name))||"";
+    var chips=[];if(prov)chips.push(["Provider",prov]);if(pad)chips.push(["Pad",pad]);
+    var net=new Date(l0.net);chips.push(["T-0",net.toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})]);
+    $("meta").innerHTML=chips.map(function(c){return '<span class="chip">'+c[0]+' <b>'+esc(c[1])+'</b></span>'}).join("");
+    $("rows").innerHTML=launches.slice(hi+1,hi+7).map(function(l){var n=split(l.name);
+      return '<div class="row"><div class="m"><div class="nm">'+esc(n[1]||n[0])+'</div><div class="sub">'+esc(n[1]?n[0]:"")+' · '+esc((l.launch_service_provider&&l.launch_service_provider.name)||"")+'</div></div>'
+        +'<div class="when" style="color:'+statusColor(l.status&&l.status.abbrev)+'">'+whenStr(l.net)+'</div></div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+    startTick();
+  }
+  function startTick(){if(tick)clearInterval(tick);
+    function upd(){if(!launches||!launches.length)return;var l0=launches[heroIndex()];var ms=new Date(l0.net)-Date.now();$("cd").textContent=cd(ms);$("cd").style.color=ms<=0?"#7aa2f7":"#e6e9ef"}
+    upd();tick=setInterval(upd,1000);
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var res=await xemd.proxy.fetch("https://ll.thespacedevs.com/2.2.0/launch/upcoming/?limit=8",{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();launches=(d.results||[]).filter(function(l){return l.net});
+      if(!launches.length)throw new Error("no upcoming launches");
+      render();
+      $("status").className="";$("status").textContent="The Space Devs · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="launch api: "+(e.message||e);if(!launches)$("boot").textContent="launch data unavailable"}
+  }
+  (async function(){
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,900000);
+  })();
+</script></body></html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Nixie Clock</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:radial-gradient(ellipse at center,#151008 0%,#080604 75%);
+    color:#ffb14a;font-family:'Courier New',ui-monospace,monospace}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+  .clock{display:flex;align-items:center;gap:10px}
+  .tube{position:relative;width:clamp(60px,11vw,140px);height:clamp(100px,19vw,240px);border-radius:16px;
+    background:radial-gradient(ellipse at 50% 120%,rgba(255,120,20,.10),rgba(20,14,8,.9) 70%);
+    border:1px solid rgba(255,150,60,.14);box-shadow:inset 0 0 40px rgba(0,0,0,.7),inset 0 8px 20px rgba(255,140,40,.05);
+    display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .tube::after{content:"";position:absolute;left:12%;top:6%;width:22%;height:60%;border-radius:50%;background:linear-gradient(180deg,rgba(255,255,255,.10),transparent);filter:blur(3px)}
+  .tube .d{font-size:clamp(60px,13vw,170px);font-weight:700;line-height:1;color:#ffbe5a;
+    text-shadow:0 0 6px #ff7a10,0 0 16px #ff6a00,0 0 34px #ff5500,0 0 60px rgba(255,60,0,.6);
+    transition:opacity .12s;font-variant-numeric:tabular-nums}
+  .tube .grid{position:absolute;inset:14%;background:
+    repeating-linear-gradient(0deg,transparent 0 6px,rgba(255,150,60,.05) 6px 7px),
+    repeating-linear-gradient(90deg,transparent 0 6px,rgba(255,150,60,.05) 6px 7px);pointer-events:none}
+  .colon{display:flex;flex-direction:column;gap:22px;padding:0 4px}
+  .colon i{width:14px;height:14px;border-radius:50%;background:#ffb14a;box-shadow:0 0 8px #ff6a00,0 0 20px #ff5500;animation:blink 2s step-start infinite}
+  @keyframes blink{50%{opacity:.25}}
+  .date{font-size:1.1rem;color:#a5764a;letter-spacing:.1em;text-transform:uppercase;text-shadow:0 0 8px rgba(255,100,20,.4)}
+  @media(max-width:520px){.tube{width:16vw;height:26vw}}
+</style></head>
+<body>
+  <div id="wrap">
+    <div class="clock" id="clock"></div>
+    <div class="date" id="date"></div>
+  </div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={hour24:false,showSeconds:true};
+  var $=function(i){return document.getElementById(i)};
+  function tube(d){return '<div class="tube"><div class="grid"></div><div class="d">'+d+'</div></div>'}
+  function colon(){return '<div class="colon"><i></i><i></i></div>'}
+  function render(){
+    var n=new Date(),h=n.getHours(),m=n.getMinutes(),s=n.getSeconds();
+    var h12=settings.hour24!==false?h:(h%12||12);
+    var hh=(settings.hour24!==false?String(h12).padStart(2,"0"):String(h12).padStart(2," ").replace(/ /g,"0"));
+    hh=String(h12).padStart(2,"0");if(settings.hour24===false&&h12<10)hh=String(h12).padStart(2,"0");
+    var parts=[tube(hh[0]),tube(hh[1]),colon(),tube(String(m).padStart(2,"0")[0]),tube(String(m).padStart(2,"0")[1])];
+    if(settings.showSeconds!==false){parts.push(colon());parts.push(tube(String(s).padStart(2,"0")[0]));parts.push(tube(String(s).padStart(2,"0")[1]))}
+    $("clock").innerHTML=parts.join("");
+    $("date").textContent=n.toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"})+(settings.hour24!==false?"":" · "+(h<12?"AM":"PM"));
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);render()});
+    xemd.ready();render();setInterval(render,500);
+  })();
+</script></body></html>

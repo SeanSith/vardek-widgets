@@ -1,0 +1,19 @@
+{
+  "id": "com.vardek.macro-pad",
+  "name": "Agent Control",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "sizes": [
+    { "cols": 2, "rows": 1 }, { "cols": 3, "rows": 1 }, { "cols": 4, "rows": 1 },
+    { "cols": 2, "rows": 2 }, { "cols": 3, "rows": 2 }, { "cols": 4, "rows": 2 },
+    { "cols": 5, "rows": 2 }, { "cols": 6, "rows": 2 }, { "cols": 8, "rows": 2 }
+  ],
+  "settingsSchema": {
+    "actions":       { "type": "actions", "label": "Buttons", "default": "" },
+    "columns":       { "type": "number",  "label": "Button columns (0 = auto)", "default": 0 },
+    "mode":          { "type": "enum",    "label": "Layout", "values": ["auto", "console", "buttons"], "default": "auto" },
+    "showProcesses": { "type": "boolean", "label": "Show live CLI processes", "default": true },
+    "showStopped":   { "type": "boolean", "label": "Show stopped agent-deck sessions", "default": true }
+  }
+}

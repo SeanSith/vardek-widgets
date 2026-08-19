@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Rain on Glass</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#05080d}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={mood:"night city"};
+  var MOOD={"night city":[["#0a1424","#060a12"],[[255,180,90],[120,180,255],[255,120,120],[140,255,200]]],
+    dusk:[["#2a1830","#0f0a18"],[[255,150,90],[255,110,160],[180,120,255],[255,200,120]]],
+    forest:[["#0a1a14","#04100a"],[[120,255,180],[180,255,120],[100,200,255],[255,240,140]]],
+    mono:[["#14161c","#080a0e"],[[200,210,230],[150,160,180],[220,225,240],[120,130,150]]]};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d"),bgc=document.createElement("canvas"),bctx=bgc.getContext("2d");
+  var W,H,dpr,statics=[],runners=[],bokeh=[];
+  function rnd(a,b){return a+Math.random()*(b-a)}
+  function buildBG(){
+    var m=MOOD[settings.mood]||MOOD["night city"];bgc.width=W;bgc.height=H;
+    var g=bctx.createLinearGradient(0,0,0,H);g.addColorStop(0,m[0][0]);g.addColorStop(1,m[0][1]);bctx.fillStyle=g;bctx.fillRect(0,0,W,H);
+    bokeh=[];for(var i=0;i<22;i++){var c=m[1][Math.floor(Math.random()*m[1].length)];
+      bokeh.push({x:Math.random()*W,y:Math.random()*H,r:rnd(20,80)*dpr,c:c,a:rnd(0.05,0.22)});}
+    bokeh.forEach(function(b){var rg=bctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r);
+      rg.addColorStop(0,"rgba("+b.c[0]+","+b.c[1]+","+b.c[2]+","+b.a+")");rg.addColorStop(1,"rgba("+b.c[0]+","+b.c[1]+","+b.c[2]+",0)");
+      bctx.fillStyle=rg;bctx.fillRect(b.x-b.r,b.y-b.r,b.r*2,b.r*2)});
+  }
+  function build(){
+    statics=[];for(var i=0;i<Math.round(W*H/6000);i++)statics.push({x:Math.random()*W,y:Math.random()*H,r:rnd(1.5,4)*dpr});
+    runners=[];for(var j=0;j<Math.round(W/90);j++)runners.push(mkRun());
+  }
+  function mkRun(){return {x:Math.random()*W,y:rnd(-H*0.4,0),r:rnd(4,9)*dpr,vy:0,wob:Math.random()*6.28,trail:0}}
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;buildBG();build()}
+  function drop(x,y,r){
+    // refractive droplet: sample bg (draw a small scaled bg piece), edge + highlight
+    ctx.save();ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.clip();
+    ctx.drawImage(bgc,x-r*1.4,y-r*1.4-r*0.6,r*2.8,r*2.8, x-r,y-r,r*2,r*2);
+    ctx.fillStyle="rgba(255,255,255,0.04)";ctx.fillRect(x-r,y-r,r*2,r*2);
+    ctx.restore();
+    ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.strokeStyle="rgba(0,0,0,0.35)";ctx.lineWidth=1*dpr;ctx.stroke();
+    ctx.beginPath();ctx.arc(x-r*0.3,y-r*0.35,r*0.28,0,7);ctx.fillStyle="rgba(255,255,255,0.5)";ctx.fill();
+  }
+  function frame(){
+    // draw blurred bg (glass)
+    ctx.drawImage(bgc,0,0);ctx.fillStyle="rgba(5,8,13,0.35)";ctx.fillRect(0,0,W,H);
+    for(var i=0;i<statics.length;i++){var s=statics[i];drop(s.x,s.y,s.r);
+      if(Math.random()<0.0008){s.x=Math.random()*W;s.y=Math.random()*H;s.r=rnd(1.5,4)*dpr}}
+    for(var j=0;j<runners.length;j++){var r=runners[j];r.wob+=0.2;r.vy+=0.05*dpr;r.vy=Math.min(r.vy,r.r*0.6);
+      r.y+=r.vy;r.x+=Math.sin(r.wob)*0.4*dpr;
+      // absorb nearby statics -> grow
+      if(Math.random()<0.1)r.r=Math.min(r.r+0.08*dpr,11*dpr);
+      // leave trail
+      r.trail++;if(r.trail>3&&r.vy>1){r.trail=0;statics.push({x:r.x+rnd(-2,2)*dpr,y:r.y-r.r,r:rnd(1,2.5)*dpr});if(statics.length>800)statics.shift()}
+      drop(r.x,r.y,r.r);
+      if(r.y-r.r>H){runners[j]=mkRun()}}
+    requestAnimationFrame(frame);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);resize()});
+    xemd.ready();resize();requestAnimationFrame(frame);window.addEventListener("resize",resize);
+  })();
+</script></body></html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Currency Strength</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--up:#6bd08a;--down:#f7768e;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:20px 30px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+  .head h1{font-size:1.25rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sub{color:var(--mid);font-size:.9rem}.head .sp{flex:1}.head .upd{font-family:var(--mono);font-size:.78rem;color:var(--dim)}
+  #list{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:5px}
+  .row{display:grid;grid-template-columns:2.2em 4.4em 1fr 4.6em;gap:12px;align-items:center;padding:5px 2px}
+  .row .flag{font-size:1.5rem;text-align:center}
+  .row .code{font-family:var(--mono);font-weight:700;font-size:1.1rem}
+  .row .bar{position:relative;height:20px}
+  .row .bar .mid{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--border)}
+  .row .bar .fill{position:absolute;top:2px;height:16px;border-radius:4px}
+  .row .bar .fill.up{background:linear-gradient(90deg,rgba(107,208,138,.4),var(--up));left:50%}
+  .row .bar .fill.down{background:linear-gradient(270deg,rgba(247,118,142,.4),var(--down));right:50%}
+  .row .pct{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;text-align:right}
+  .row .pct.up{color:var(--up)}.row .pct.down{color:var(--down)}
+  #status{position:fixed;left:30px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">💪</span>Currency Strength</h1><span class="sub" id="sub"></span><span class="sp"></span><span class="upd" id="upd"></span></div>
+    <div id="list"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={symbols:"EUR,GBP,JPY,CAD,AUD,CHF,CNY,SEK,NZD,MXN",days:30};
+  var $=function(i){return document.getElementById(i)}, last=0;
+  var FLAG={USD:"🇺🇸",EUR:"🇪🇺",GBP:"🇬🇧",JPY:"🇯🇵",CAD:"🇨🇦",AUD:"🇦🇺",CHF:"🇨🇭",CNY:"🇨🇳",SEK:"🇸🇪",NZD:"🇳🇿",MXN:"🇲🇽",NOK:"🇳🇴",INR:"🇮🇳",BRL:"🇧🇷",ZAR:"🇿🇦",SGD:"🇸🇬",HKD:"🇭🇰",KRW:"🇰🇷",PLN:"🇵🇱",DKK:"🇩🇰"};
+  function ymd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+  function render(items){
+    var mx=Math.max.apply(null,items.map(function(x){return Math.abs(x.chg)}).concat([0.5]));
+    $("list").innerHTML=items.map(function(x){
+      var up=x.chg>=0,w=Math.min(50,Math.abs(x.chg)/mx*50);
+      return '<div class="row"><div class="flag">'+(FLAG[x.code]||"🏳️")+'</div><div class="code">'+x.code+'</div>'
+        +'<div class="bar"><div class="mid"></div><div class="fill '+(up?"up":"down")+'" style="width:'+w+'%"></div></div>'
+        +'<div class="pct '+(up?"up":"down")+'">'+(up?"+":"")+x.chg.toFixed(2)+'%</div></div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<60000)return; last=Date.now();
+    try{
+      var syms=settings.symbols.split(",").map(function(s){return s.trim().toUpperCase()}).filter(Boolean);
+      var days=Math.max(7,Number(settings.days)||30);
+      var end=new Date(),start=new Date(end.getTime()-(days+4)*86400000);
+      var res=await xemd.proxy.fetch("https://api.frankfurter.dev/v1/"+ymd(start)+".."+ymd(end)+"?base=USD&symbols="+syms.join(","),{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();var dates=Object.keys(d.rates||{}).sort();
+      if(dates.length<2)throw new Error("no data");
+      var first=d.rates[dates[0]],lastr=d.rates[dates[dates.length-1]];
+      // change of currency X vs USD = rate_start/rate_end - 1 (rate is USD->X)
+      var items=syms.filter(function(c){return first[c]&&lastr[c]}).map(function(c){return {code:c,chg:(first[c]/lastr[c]-1)*100}});
+      items.sort(function(a,b){return b.chg-a.chg});
+      $("sub").textContent="vs USD · "+days+"-day";
+      render(items.slice(0,10));
+      $("upd").textContent=dates[0]+" → "+dates[dates.length-1];
+      $("status").className="";$("status").textContent="Frankfurter (ECB)";
+    }catch(e){$("status").className="err";$("status").textContent="fx: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="fx data unavailable"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,3600000);
+  })();
+</script></body></html>

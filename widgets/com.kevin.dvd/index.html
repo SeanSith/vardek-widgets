@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bouncer</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={label:"VARDEK",speed:1};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d"),W,H,dpr;
+  var x=80,y=80,vx=2.2,vy=1.8,hue=200,corners=0,flash=0,logoW,logoH;
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;
+    logoW=Math.min(W*0.28,240*dpr);logoH=logoW*0.42;}
+  function drawLogo(){
+    ctx.save();ctx.translate(x,y);
+    ctx.fillStyle="hsl("+hue+",85%,55%)";
+    var r=logoH*0.5;ctx.beginPath();
+    ctx.moveTo(r,0);ctx.arcTo(logoW,0,logoW,logoH,r);ctx.arcTo(logoW,logoH,0,logoH,r);ctx.arcTo(0,logoH,0,0,r);ctx.arcTo(0,0,logoW,0,r);ctx.closePath();
+    ctx.shadowColor="hsl("+hue+",90%,60%)";ctx.shadowBlur=(18+flash*40)*dpr;ctx.fill();ctx.shadowBlur=0;
+    ctx.fillStyle="rgba(0,0,0,0.85)";ctx.font="700 "+(logoH*0.44)+"px -apple-system,sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText(settings.label||"VARDEK",logoW/2,logoH*0.52);
+    ctx.restore();
+  }
+  function frame(){
+    ctx.fillStyle="#000";ctx.fillRect(0,0,W,H);
+    if(flash>0){ctx.fillStyle="hsla("+hue+",90%,60%,"+(flash*0.4)+")";ctx.fillRect(0,0,W,H);flash*=0.9;if(flash<0.01)flash=0}
+    var sp=Number(settings.speed)||1;x+=vx*dpr*sp;y+=vy*dpr*sp;
+    var hitX=false,hitY=false;
+    if(x<=0){x=0;vx=Math.abs(vx);hitX=true}if(x+logoW>=W){x=W-logoW;vx=-Math.abs(vx);hitX=true}
+    if(y<=0){y=0;vy=Math.abs(vy);hitY=true}if(y+logoH>=H){y=H-logoH;vy=-Math.abs(vy);hitY=true}
+    if(hitX||hitY)hue=(hue+47)%360;
+    if(hitX&&hitY){corners++;flash=1}
+    drawLogo();
+    if(corners>0){ctx.fillStyle="rgba(255,255,255,0.5)";ctx.font=(13*dpr)+"px ui-monospace,monospace";ctx.textAlign="left";ctx.textBaseline="top";ctx.fillText("corner hits: "+corners,16*dpr,14*dpr)}
+    requestAnimationFrame(frame);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s)});
+    xemd.ready();resize();x=Math.random()*(W-logoW);y=Math.random()*(H-logoH);requestAnimationFrame(frame);window.addEventListener("resize",resize);
+  })();
+</script></body></html>

@@ -1,0 +1,41 @@
+{
+  "id": "com.kevin.sysmon",
+  "name": "System Monitor",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 3,
+  "permissions": {
+    "proxy": [],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "netScaleKBs": {
+      "type": "number",
+      "label": "Network sparkline scale (KB/s)",
+      "default": 2000
+    }
+  }
+}

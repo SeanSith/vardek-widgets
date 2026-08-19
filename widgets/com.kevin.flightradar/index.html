@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Radar</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --bg: #05090a; --text: #cde6d8; --text-mid: #6f8f7e; --text-dim: #3f5a4c;
+          --radar: #2ee08a; --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; }
+  #root { position: relative; width: 100%; height: 100%; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #panel { position: absolute; right: 0; top: 0; bottom: 0; width: 300px; display: none; flex-direction: column;
+           padding: 18px 22px; gap: 10px; font-family: var(--mono); }
+  body.wide #panel { display: flex; }
+  #panel h1 { font-family: -apple-system, sans-serif; font-size: 1.2rem; font-weight: 700; letter-spacing: .02em; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  #panel .count { font-size: 2.4rem; font-weight: 700; color: var(--radar); line-height: 1; margin-top: 4px; }
+  #panel .count small { font-size: .9rem; color: var(--text-mid); font-weight: 500; }
+  #panel .lbl { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); margin-top: 10px; }
+  .ac { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: .82rem; padding: 5px 0; border-bottom: 1px solid rgba(46,224,138,.10); }
+  .ac .cs { color: var(--text); font-weight: 600; } .ac .ty { color: var(--text-dim); }
+  .ac .d { color: var(--text-mid); text-align: right; } .ac .a { color: var(--radar); text-align: right; }
+  #status { position: absolute; left: 16px; bottom: 12px; font-family: var(--mono); font-size: .78rem; color: var(--text-dim); }
+  #status.err { color: #f7768e; }
+</style>
+</head>
+<body>
+  <div id="root">
+    <canvas id="c"></canvas>
+    <div id="panel">
+      <h1>✈ Flight Radar</h1>
+      <div><span class="count" id="p-count">—</span></div>
+      <div class="lbl">Closest</div>
+      <div id="p-list"></div>
+    </div>
+    <div id="status">connecting…</div>
+  </div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings = { latitude: 37.7749, longitude: -122.4194, rangeNm: 60, showLabels: true };
+  var $ = function (id) { return document.getElementById(id); };
+  var canvas = $("c"), ctx = canvas.getContext("2d");
+  var W = 0, H = 0, dpr = 1, aircraft = [], lastFetch = 0, sweep = 0, err = null;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.max(1, Math.round(canvas.clientWidth * dpr)), h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; W = w; H = h; }
+    document.body.classList.toggle("wide", canvas.clientWidth / canvas.clientHeight >= 1.7 && canvas.clientWidth >= 560);
+  }
+
+  // geo helpers
+  function toRad(d) { return d * Math.PI / 180; }
+  function distNm(la1, lo1, la2, lo2) {
+    var R = 3440.065, dLa = toRad(la2 - la1), dLo = toRad(lo2 - lo1);
+    var a = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(toRad(la1)) * Math.cos(toRad(la2)) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+  function bearing(la1, lo1, la2, lo2) {
+    var y = Math.sin(toRad(lo2 - lo1)) * Math.cos(toRad(la2));
+    var x = Math.cos(toRad(la1)) * Math.sin(toRad(la2)) - Math.sin(toRad(la1)) * Math.cos(toRad(la2)) * Math.cos(toRad(lo2 - lo1));
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  }
+  function isGround(a) { return a.alt_baro === "ground" || a.alt_baro === "grnd"; }
+  function altFt(a) { return (typeof a.alt_baro === "number") ? a.alt_baro : null; }
+  function flStr(a) { if (isGround(a)) return "GND"; var v = altFt(a); return v == null ? "—" : "FL" + Math.max(0, Math.round(v / 100)); }
+  function altColor(a) {
+    if (isGround(a)) return "#5a6f62"; var alt = altFt(a);
+    if (alt == null) return "#8fb0a0";
+    if (alt < 5000) return "#f7768e"; if (alt < 15000) return "#e0af68";
+    if (alt < 30000) return "#9ece6a"; return "#7dd3fc";
+  }
+
+  function geometry() {
+    var cwv = canvas.clientWidth, ch = canvas.clientHeight, wide = document.body.classList.contains("wide");
+    var avail = wide ? cwv - 300 : cwv;
+    var R = Math.min(avail, ch) * 0.44 * dpr;
+    var cx = (wide ? avail / 2 : cwv / 2) * dpr, cy = ch / 2 * dpr;
+    return { cx: cx, cy: cy, R: R };
+  }
+
+  function draw() {
+    resize();
+    var g = geometry(), cx = g.cx, cy = g.cy, R = g.R;
+    var range = Number(settings.rangeNm) || 60;
+    ctx.fillStyle = "#05090a"; ctx.fillRect(0, 0, W, H);
+
+    // range rings
+    ctx.strokeStyle = "rgba(46,224,138,.16)"; ctx.lineWidth = 1 * dpr;
+    for (var i = 1; i <= 4; i++) { ctx.beginPath(); ctx.arc(cx, cy, R * i / 4, 0, 7); ctx.stroke(); }
+    // cross-hairs
+    ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
+    ctx.strokeStyle = "rgba(46,224,138,.10)"; ctx.stroke();
+    // range labels + compass
+    ctx.fillStyle = "rgba(120,170,150,.6)"; ctx.font = (10 * dpr) + "px " + "var(--mono), monospace"; ctx.textAlign = "center";
+    for (var r = 1; r <= 4; r++) ctx.fillText(Math.round(range * r / 4) + "nm", cx, cy - R * r / 4 - 3 * dpr);
+    ctx.fillStyle = "rgba(120,170,150,.7)"; ctx.font = (12 * dpr) + "px sans-serif";
+    ctx.fillText("N", cx, cy - R - 8 * dpr); ctx.fillText("S", cx, cy + R + 16 * dpr);
+    ctx.textAlign = "left"; ctx.fillText("E", cx + R + 6 * dpr, cy + 4 * dpr);
+    ctx.textAlign = "right"; ctx.fillText("W", cx - R - 6 * dpr, cy + 4 * dpr);
+
+    // sweep
+    sweep = (sweep + 0.6) % 360;
+    var sa = toRad(sweep - 90);
+    var grad = ctx.createConicGradient ? null : null;
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(toRad(sweep));
+    var lg = ctx.createLinearGradient(0, 0, 0, -R);
+    lg.addColorStop(0, "rgba(46,224,138,0)"); lg.addColorStop(1, "rgba(46,224,138,.22)");
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, R, -Math.PI / 2 - 0.34, -Math.PI / 2); ctx.closePath();
+    ctx.fillStyle = lg; ctx.fill(); ctx.restore();
+
+    // plot aircraft
+    var lat = Number(settings.latitude), lon = Number(settings.longitude);
+    var plotted = aircraft.map(function (a) {
+      if (a.lat == null || a.lon == null) return null;
+      var d = distNm(lat, lon, a.lat, a.lon); if (d > range * 1.02) return null;
+      var b = bearing(lat, lon, a.lat, a.lon), rr = d / range * R, ba = toRad(b - 90);
+      return { a: a, d: d, x: cx + Math.cos(ba) * rr, y: cy + Math.sin(ba) * rr };
+    }).filter(Boolean);
+    plotted.sort(function (p, q) { return p.d - q.d; });
+    var airborne = plotted.filter(function (p) { return !isGround(p.a); });
+
+    // ground traffic: small dim dots, no label
+    plotted.forEach(function (p) {
+      if (!isGround(p.a)) return;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 1.6 * dpr, 0, 7); ctx.fillStyle = "rgba(90,111,98,.7)"; ctx.fill();
+    });
+    // airborne: heading triangle + capped labels (nearest first)
+    var labelBudget = settings.showLabels === false ? 0 : 26;
+    airborne.forEach(function (p, i) {
+      var a = p.a, col = altColor(a);
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(toRad((a.track || 0)));
+      ctx.fillStyle = col; ctx.beginPath();
+      var s = 5 * dpr; ctx.moveTo(0, -s); ctx.lineTo(s * 0.7, s * 0.8); ctx.lineTo(0, s * 0.4); ctx.lineTo(-s * 0.7, s * 0.8); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      if (i < labelBudget && p.d < range * 0.95) {
+        ctx.fillStyle = "rgba(205,230,216,.85)"; ctx.font = (9.5 * dpr) + "px " + "ui-monospace, monospace"; ctx.textAlign = "left";
+        var cs = (a.flight || a.r || a.hex || "").trim();
+        var v = altFt(a), fl = v != null ? " " + Math.round(v / 100) : "";
+        ctx.fillText(cs + fl, p.x + 7 * dpr, p.y + 3 * dpr);
+      }
+    });
+    // center dot (you)
+    ctx.beginPath(); ctx.arc(cx, cy, 3.5 * dpr, 0, 7); ctx.fillStyle = "#e6e9ef"; ctx.fill();
+
+    // panel
+    var nGround = plotted.length - airborne.length;
+    $("p-count").innerHTML = airborne.length + ' <small>airborne' + (nGround ? " · " + nGround + " on ground" : "") + '</small>';
+    var list = $("p-list"); list.innerHTML = "";
+    airborne.slice(0, 8).forEach(function (p) {
+      var a = p.a, row = document.createElement("div"); row.className = "ac";
+      row.innerHTML = '<span class="cs">' + esc((a.flight || a.r || a.hex || "?").trim()) + '</span>'
+        + '<span class="d">' + p.d.toFixed(0) + ' nm</span>'
+        + '<span class="ty">' + esc(a.t || "") + '</span>'
+        + '<span class="a">' + flStr(a) + '</span>';
+      list.appendChild(row);
+    });
+    var s = $("status");
+    if (err) { s.className = "err"; s.textContent = "adsb: " + err; }
+    else { s.className = ""; s.textContent = plotted.length + " aircraft · " + settings.latitude.toFixed(2) + "," + settings.longitude.toFixed(2) + " · " + (lastFetch ? Math.round((Date.now() - lastFetch) / 1000) + "s ago" : ""); }
+    requestAnimationFrame(draw);
+  }
+  function esc(s) { return String(s).replace(/[<>&]/g, function (c) { return { "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]; }); }
+
+  async function fetchData() {
+    if (Date.now() - lastFetch < 8000) return;
+    var lat = Number(settings.latitude), lon = Number(settings.longitude), rng = Math.min(250, Number(settings.rangeNm) || 60);
+    try {
+      var res = await xemd.proxy.fetch("https://api.adsb.lol/v2/lat/" + lat + "/lon/" + lon + "/dist/" + Math.ceil(rng), { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      var data = await res.json();
+      aircraft = data.ac || data.aircraft || []; err = null; lastFetch = Date.now();
+    } catch (e) { err = (e.message || "fetch failed"); if (!lastFetch) lastFetch = 0; }
+  }
+
+  (async function () {
+    try { var s = await Promise.race([xemd.settings.get(), new Promise(function (r) { setTimeout(function () { r(null); }, 1500); })]); if (s) settings = Object.assign(settings, s); } catch (e) {}
+    xemd.onSettingsChange(function (s) { if (s) settings = Object.assign(settings, s); lastFetch = 0; fetchData(); });
+    xemd.onRefresh(function () { lastFetch = 0; fetchData(); });
+    xemd.ready();
+    fetchData(); setInterval(fetchData, 10000);
+    requestAnimationFrame(draw);
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Air Quality Cities</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:20px 28px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+  .head h1{font-size:1.25rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sp{flex:1}.head .upd{font-family:var(--mono);font-size:.78rem;color:var(--dim)}
+  #grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-content:center}
+  .city{background:var(--surface);border:1px solid var(--border);border-left-width:5px;border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:16px;overflow:hidden}
+  .city .m{min-width:0;flex:1}
+  .city .nm{font-size:1.1rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .city .cat{font-size:.85rem;margin-top:1px}
+  .city .pm{font-family:var(--mono);font-size:.75rem;color:var(--dim);margin-top:3px}
+  .city .aqi{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:2.6rem;line-height:1}
+  #status{position:fixed;left:28px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">🌫️</span>Air Quality</h1><span class="sp"></span><span class="upd" id="upd"></span></div>
+    <div id="grid"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={cities:"San Francisco,37.77,-122.42;New York,40.71,-74.01;London,51.51,-0.13;Delhi,28.61,77.21;Beijing,39.90,116.40;Tokyo,35.68,139.69"};
+  var $=function(i){return document.getElementById(i)}, last=0;
+  var Z=[[0,50,"Good","#6bd08a"],[51,100,"Moderate","#e0af68"],[101,150,"Unhealthy (sensitive)","#ff9e42"],[151,200,"Unhealthy","#f7768e"],[201,300,"Very Unhealthy","#bb9af7"],[301,999,"Hazardous","#a24759"]];
+  function zone(a){for(var i=0;i<Z.length;i++)if(a<=Z[i][1])return Z[i];return Z[Z.length-1]}
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function parseCities(){return settings.cities.split(";").map(function(s){var p=s.split(",");return {name:(p[0]||"").trim(),lat:parseFloat(p[1]),lon:parseFloat(p[2])}}).filter(function(c){return c.name&&!isNaN(c.lat)}).slice(0,9)}
+  function render(cities,arr){
+    var items=cities.map(function(c,i){var cur=arr[i]&&arr[i].current;return {name:c.name,aqi:cur?cur.us_aqi:null,pm:cur?cur.pm2_5:null}})
+      .sort(function(a,b){return (b.aqi==null?-1:b.aqi)-(a.aqi==null?-1:a.aqi)});
+    $("grid").style.gridTemplateColumns="repeat("+(cities.length<=4?2:3)+",1fr)";
+    $("grid").innerHTML=items.map(function(c){
+      if(c.aqi==null)return '<div class="city"><div class="m"><div class="nm">'+esc(c.name)+'</div><div class="cat">no data</div></div></div>';
+      var z=zone(c.aqi);
+      return '<div class="city" style="border-left-color:'+z[3]+'"><div class="m"><div class="nm">'+esc(c.name)+'</div>'
+        +'<div class="cat" style="color:'+z[3]+'">'+z[2]+'</div><div class="pm">PM2.5 '+Math.round(c.pm)+' µg/m³</div></div>'
+        +'<div class="aqi" style="color:'+z[3]+'">'+Math.round(c.aqi)+'</div></div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var cities=parseCities();if(!cities.length)throw new Error("no cities");
+      var lats=cities.map(function(c){return c.lat}).join(","),lons=cities.map(function(c){return c.lon}).join(",");
+      var res=await xemd.proxy.fetch("https://air-quality-api.open-meteo.com/v1/air-quality?latitude="+lats+"&longitude="+lons+"&current=us_aqi,pm2_5&timezone=auto",{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();render(cities,Array.isArray(d)?d:[d]);
+      $("upd").textContent="US AQI · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+      $("status").className="";$("status").textContent="Open-Meteo AQ";
+    }catch(e){$("status").className="err";$("status").textContent="aq: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="air quality unavailable"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,900000);
+  })();
+</script></body></html>

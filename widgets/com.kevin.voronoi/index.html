@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Voronoi</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#05060a}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={cells:18,palette:"aurora"};
+  var PAL={aurora:[[60,220,150],[70,140,240],[160,100,230],[50,200,210]],sunset:[[250,120,60],[240,60,120],[250,200,80],[200,60,90]],
+    jewel:[[40,120,200],[160,40,160],[40,160,120],[200,140,40]],mono:[[120,130,150],[80,90,110],[160,170,190],[100,110,130]],
+    candy:[[255,120,180],[120,200,255],[180,255,150],[255,210,120]]};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d");
+  var off=document.createElement("canvas"),octx=off.getContext("2d"),img;
+  var W,H,dpr,gw,gh,scale,seeds=[];
+  function rnd(a,b){return a+Math.random()*(b-a)}
+  function build(){
+    var n=Math.max(3,Math.min(40,Math.round(Number(settings.cells)||18))),pal=PAL[settings.palette]||PAL.aurora;
+    seeds=[];for(var i=0;i<n;i++){var c=pal[i%pal.length];var j=(Math.random()-0.5)*40;
+      seeds.push({x:Math.random()*gw,y:Math.random()*gh,vx:rnd(-0.12,0.12),vy:rnd(-0.12,0.12),
+        r:Math.max(0,Math.min(255,c[0]+j)),g:Math.max(0,Math.min(255,c[1]+j)),b:Math.max(0,Math.min(255,c[2]+j))});}
+  }
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;
+    scale=Math.max(3,Math.round(5*dpr));gw=Math.ceil(W/scale);gh=Math.ceil(H/scale);off.width=gw;off.height=gh;img=octx.createImageData(gw,gh);build()}
+  function frame(){
+    for(var i=0;i<seeds.length;i++){var s=seeds[i];s.x+=s.vx;s.y+=s.vy;if(s.x<0||s.x>gw)s.vx*=-1;if(s.y<0||s.y>gh)s.vy*=-1;}
+    var d=img.data,ns=seeds.length;
+    for(var y=0;y<gh;y++)for(var x=0;x<gw;x++){var best=1e9,best2=1e9,bi=0;
+      for(var k=0;k<ns;k++){var dx=x-seeds[k].x,dy=y-seeds[k].y,dd=dx*dx+dy*dy;if(dd<best){best2=best;best=dd;bi=k}else if(dd<best2)best2=dd}
+      var s=seeds[bi],edge=(Math.sqrt(best2)-Math.sqrt(best));var shade=edge<1.2?0.15:(edge<2.4?0.45+edge*0.2:1);
+      // subtle radial shading within cell
+      var lit=1-Math.min(0.35,Math.sqrt(best)/(gw*0.5));shade*=lit+0.6;
+      var o=(y*gw+x)*4;d[o]=s.r*shade;d[o+1]=s.g*shade;d[o+2]=s.b*shade;d[o+3]=255;}
+    octx.putImageData(img,0,0);ctx.imageSmoothingEnabled=true;ctx.drawImage(off,0,0,gw,gh,0,0,W,H);
+    requestAnimationFrame(frame);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);build()});
+    xemd.ready();resize();requestAnimationFrame(frame);window.addEventListener("resize",resize);
+  })();
+</script></body></html>

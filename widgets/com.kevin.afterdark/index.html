@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>After Dark</title>
+<style>
+  /* After Dark screensavers recreated in CSS by Bryan Braun
+     (github.com/bryanbraun/after-dark-css); original After Dark © Berkeley
+     Systems. Sprites are served locally from this widget's img/ dir. */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  .saver { position: absolute; inset: 0; display: none; overflow: hidden; }
+  body[data-saver="toasters"] #toasters,
+  body[data-saver="warp"] #warp,
+  body[data-saver="globe"] #globe { display: block; }
+
+  /* ── Flying Toasters ────────────────────────────────────────────── */
+  #toasters { background: #04001f; }               /* After Dark night sky */
+  #toasters .toaster, #toasters .toast { position: absolute; width: 64px; height: 64px; image-rendering: pixelated; }
+  #toasters .toaster { background-image: url("img/toaster-sprite.gif"); }
+  #toasters .toast { background-image: url("img/toast1.gif"); }
+  .t1 { animation: flap .2s steps(4) infinite alternate, fly 10s linear infinite; }
+  .t2 { animation: flap .2s steps(4) infinite alternate-reverse, fly 16s linear infinite; }
+  .t3 { animation: flap .2s steps(4) infinite alternate, fly 24s linear infinite; }
+  .t4 { animation: flap .2s steps(4) infinite alternate, fly 10s 5s linear infinite; }
+  .t5 { animation: flap .2s steps(4) infinite alternate-reverse, fly 24s 4s linear infinite; }
+  .t6 { animation: flap .2s steps(4) infinite alternate, fly 24s 8s linear infinite; }
+  .t7 { animation: flap .2s steps(4) infinite alternate-reverse, fly 24s 12s linear infinite; }
+  .t8 { animation: flap .2s steps(4) infinite alternate, fly 24s 16s linear infinite; }
+  .t9 { animation: flap .2s steps(4) infinite alternate-reverse, fly 24s 20s linear infinite; }
+  .tst1 { animation: fly 10s linear infinite; }
+  .tst2 { animation: fly 16s linear infinite; }
+  .tst3 { animation: fly 24s linear infinite; }
+  .tst4 { animation: fly 24s 12s linear infinite; }
+  @keyframes flap { from { background-position: 0; } to { background-position: -256px; } }
+  @keyframes fly { from { transform: translate(0,0); } to { transform: translate(-1600px, 1600px); } }
+  /* start positions (reverse-L batches so the flow stays constant) */
+  .p6{right:-2%;top:-17%}.p7{right:10%;top:-19%}.p8{right:20%;top:-18%}.p9{right:30%;top:-20%}
+  .p10{right:40%;top:-21%}.p11{right:50%;top:-18%}.p12{right:60%;top:-20%}
+  .p13{right:-17%;top:10%}.p14{right:-19%;top:20%}.p15{right:-21%;top:30%}.p16{right:-23%;top:50%}.p17{right:-25%;top:70%}
+  .p18{right:0;top:-26%}.p19{right:10%;top:-20%}.p20{right:20%;top:-36%}.p21{right:30%;top:-24%}.p22{right:40%;top:-33%}.p23{right:60%;top:-40%}
+  .p24{right:-26%;top:10%}.p25{right:-36%;top:30%}.p26{right:-29%;top:50%}
+  .p27{right:0;top:-46%}.p28{right:10%;top:-56%}.p29{right:20%;top:-49%}.p30{right:30%;top:-60%}
+  .p31{right:-46%;top:10%}.p32{right:-56%;top:20%}.p33{right:-49%;top:30%}
+
+  /* ── Warp (starfield) — Keith Clark's zoom technique ────────────── */
+  #warp { background: #000; }
+  /* a persistent dim starfield so it always reads as space, with the zoom layers on top */
+  #warp::before { content: ""; position: absolute; inset: 0; background: url(img/stars2.png) center/cover no-repeat; opacity: .28; }
+  #warp .stars { position: absolute; inset: 0; background-size: cover; background-position: center; background-repeat: no-repeat;
+                 opacity: 0; animation: zoom 5s infinite; }
+  #warp .stars:nth-child(1){ background-image:url(img/stars1.png); animation-delay:0s }
+  #warp .stars:nth-child(2){ background-image:url(img/stars2.png); animation-delay:.75s }
+  #warp .stars:nth-child(3){ background-image:url(img/stars3.png); animation-delay:1.5s }
+  #warp .stars:nth-child(4){ background-image:url(img/stars4.png); animation-delay:2.25s }
+  #warp .stars:nth-child(5){ background-image:url(img/stars1.png); animation-delay:3s }
+  #warp .stars:nth-child(6){ background-image:url(img/stars2.png); animation-delay:3.75s }
+  #warp .stars:nth-child(7){ background-image:url(img/stars3.png); animation-delay:4.5s }
+  #warp .stars:nth-child(8){ background-image:url(img/stars4.png); animation-delay:5.25s }
+  @keyframes zoom {
+    0%   { opacity: 0; transform: scale(.35); animation-timing-function: ease-in; }
+    12%  { opacity: 1; }
+    100% { opacity: 0; transform: scale(2.6); }
+  }
+
+  /* ── Globe ──────────────────────────────────────────────────────── */
+  #globe { background: #000; }
+  #globe .ball { position: absolute; width: 240px; height: 240px; border-radius: 50%;
+                 background-image: url(img/globe_240.jpg); background-repeat: repeat-x;
+                 box-shadow: inset -18px 0 40px rgba(0,0,0,.55), inset 10px 0 22px rgba(255,255,255,.06);
+                 animation: gx 7s linear infinite alternate, gy 5.4s linear infinite alternate, spin 1.6s steps(21) infinite; }
+  @keyframes gx { from { left: 0; } to { left: calc(100vw - 240px); } }
+  @keyframes gy { from { top: 0; } to { top: calc(100vh - 240px); } }
+  @keyframes spin { from { background-position: -5040px 0; } to { background-position: 0 0; } }
+  @media (max-height: 360px) { #globe .ball { width: 180px; height: 180px; }
+    @keyframes gx { from { left: 0; } to { left: calc(100vw - 180px); } }
+    @keyframes gy { from { top: 0; } to { top: calc(100vh - 180px); } } }
+</style>
+</head>
+<body data-saver="toasters">
+  <div class="saver" id="toasters">
+    <div class="toaster t1 p6"></div><div class="toaster t3 p7"></div><div class="toast tst1 p8"></div>
+    <div class="toaster t3 p9"></div><div class="toaster t1 p11"></div><div class="toaster t3 p12"></div>
+    <div class="toaster t2 p13"></div><div class="toast tst3 p14"></div><div class="toast tst2 p16"></div>
+    <div class="toaster t1 p17"></div><div class="toast tst2 p19"></div><div class="toast tst3 p20"></div>
+    <div class="toaster t2 p21"></div><div class="toast tst1 p24"></div><div class="toaster t1 p22"></div>
+    <div class="toast tst2 p26"></div><div class="toaster t1 p28"></div><div class="toast tst2 p30"></div>
+    <div class="toaster t2 p31"></div><div class="toaster t1 p32"></div><div class="toast tst3 p33"></div>
+    <div class="toaster t4 p27"></div><div class="toaster t4 p10"></div><div class="toaster t4 p25"></div><div class="toaster t4 p29"></div>
+    <div class="toaster t5 p15"></div><div class="toaster t5 p18"></div><div class="toaster t5 p22"></div>
+    <div class="toaster t6 p6"></div><div class="toaster t6 p11"></div><div class="toaster t6 p15"></div><div class="toaster t6 p19"></div><div class="toaster t6 p23"></div>
+    <div class="toast tst4 p10"></div><div class="toast tst4 p23"></div><div class="toast tst4 p15"></div>
+    <div class="toaster t7 p7"></div><div class="toaster t7 p12"></div><div class="toaster t7 p16"></div><div class="toaster t7 p20"></div><div class="toaster t7 p24"></div>
+    <div class="toaster t8 p8"></div><div class="toaster t8 p13"></div><div class="toaster t8 p17"></div><div class="toaster t8 p25"></div>
+    <div class="toaster t9 p14"></div><div class="toaster t9 p18"></div><div class="toaster t9 p21"></div><div class="toaster t9 p26"></div>
+  </div>
+  <div class="saver" id="warp">
+    <div class="stars"></div><div class="stars"></div><div class="stars"></div><div class="stars"></div>
+    <div class="stars"></div><div class="stars"></div><div class="stars"></div><div class="stars"></div>
+  </div>
+  <div class="saver" id="globe"><div class="ball"></div></div>
+
+<script>
+(function () {
+  "use strict";
+  var settings = { saver: "toasters", cycleMinutes: 3 };
+  var ORDER = ["toasters", "warp", "globe"];
+  var cycleTimer = null, idx = 0;
+
+  function show(name) {
+    if (ORDER.indexOf(name) < 0) name = "toasters";
+    document.body.setAttribute("data-saver", name);
+  }
+  function startCycle() {
+    if (cycleTimer) clearInterval(cycleTimer);
+    var mins = Number(settings.cycleMinutes) > 0 ? Number(settings.cycleMinutes) : 3;
+    show(ORDER[idx % ORDER.length]);
+    cycleTimer = setInterval(function () { idx++; show(ORDER[idx % ORDER.length]); }, mins * 60000);
+  }
+  function apply() {
+    settings = Object.assign(settings, (window.Vardek && Vardek.settings) || {});
+    if (cycleTimer) { clearInterval(cycleTimer); cycleTimer = null; }
+    if (settings.saver === "cycle") startCycle();
+    else show(settings.saver);
+  }
+  document.addEventListener("vardek:ready", apply);
+  apply();
+})();
+</script>
+</body>
+</html>

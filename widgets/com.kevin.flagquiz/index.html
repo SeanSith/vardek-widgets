@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Flag Quiz</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--ok:#6bd08a;--accent:#7aa2f7}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;padding:24px 40px;gap:44px}
+  .flag{font-size:12rem;line-height:1;flex-shrink:0;filter:drop-shadow(0 6px 18px rgba(0,0,0,.5))}
+  .right{flex:1;min-width:0}
+  .q{font-size:1rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px}
+  .opts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .opt{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;font-size:1.3rem;transition:background .3s,border-color .3s,opacity .3s}
+  .opt .k{font-family:var(--mono);font-weight:800;color:var(--accent);width:1.3em;flex-shrink:0}
+  .opt.correct{background:rgba(107,208,138,.16);border-color:var(--ok)}.opt.correct .k{color:var(--ok)}
+  .opt.dim{opacity:.4}
+  .bar{height:4px;background:var(--surface);border-radius:2px;margin-top:16px;overflow:hidden}
+  .bar>div{height:100%;background:var(--accent);transform-origin:left;width:100%}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">…</div>
+  <div id="wrap" style="display:none">
+    <div class="flag" id="flag"></div>
+    <div class="right"><div class="q">Which country's flag is this?</div><div class="opts" id="opts"></div><div class="bar"><div id="barfill"></div></div></div>
+  </div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={revealSec:8};
+  var $=function(i){return document.getElementById(i)}, t1=null,t2=null;
+  var C=[["Japan","🇯🇵"],["Brazil","🇧🇷"],["Canada","🇨🇦"],["Kenya","🇰🇪"],["Norway","🇳🇴"],["Nepal","🇳🇵"],["Mexico","🇲🇽"],
+    ["Egypt","🇪🇬"],["India","🇮🇳"],["Greece","🇬🇷"],["Peru","🇵🇪"],["Chile","🇨🇱"],["Ireland","🇮🇪"],["Portugal","🇵🇹"],
+    ["Vietnam","🇻🇳"],["Thailand","🇹🇭"],["Turkey","🇹🇷"],["Sweden","🇸🇪"],["Finland","🇫🇮"],["Iceland","🇮🇸"],
+    ["Argentina","🇦🇷"],["Australia","🇦🇺"],["Germany","🇩🇪"],["France","🇫🇷"],["Italy","🇮🇹"],["Spain","🇪🇸"],
+    ["Kenya","🇰🇪"],["Morocco","🇲🇦"],["South Africa","🇿🇦"],["Indonesia","🇮🇩"],["Switzerland","🇨🇭"],["Netherlands","🇳🇱"],
+    ["South Korea","🇰🇷"],["Colombia","🇨🇴"],["Poland","🇵🇱"],["Croatia","🇭🇷"],["Fiji","🇫🇯"],["Jamaica","🇯🇲"],
+    ["Bhutan","🇧🇹"],["Ethiopia","🇪🇹"],["Singapore","🇸🇬"],["New Zealand","🇳🇿"],["Ukraine","🇺🇦"],["Israel","🇮🇱"],
+    ["Saudi Arabia","🇸🇦"],["Kazakhstan","🇰🇿"],["Mongolia","🇲🇳"]];
+  var seen={};
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function pick(n,exclude){var out=[],tries=0;while(out.length<n&&tries<200){tries++;var c=C[Math.floor(Math.random()*C.length)];
+    if(c[0]===exclude)continue;if(out.some(function(o){return o[0]===c[0]}))continue;out.push(c)}return out}
+  function shuffle(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
+  function next(){
+    var ans=C[Math.floor(Math.random()*C.length)];
+    var opts=shuffle([ans].concat(pick(3,ans[0])));
+    $("flag").textContent=ans[1];
+    var keys=["A","B","C","D"];
+    $("opts").innerHTML=opts.map(function(o,i){return '<div class="opt" data-c="'+(o[0]===ans[0]?"1":"0")+'"><span class="k">'+keys[i]+'</span><span>'+esc(o[0])+'</span></div>'}).join("");
+    var bf=$("barfill");bf.style.transition="none";bf.style.transform="scaleX(1)";void bf.offsetWidth;
+    var rev=Math.max(4,Number(settings.revealSec)||8);
+    bf.style.transition="transform "+rev+"s linear";bf.style.transform="scaleX(0)";
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+    t1=setTimeout(function(){
+      Array.prototype.forEach.call($("opts").children,function(el){if(el.getAttribute("data-c")==="1")el.classList.add("correct");else el.classList.add("dim")});
+      t2=setTimeout(next,3000);
+    },rev*1000);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s)});
+    xemd.ready();next();
+  })();
+</script></body></html>

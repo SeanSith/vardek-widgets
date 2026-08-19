@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tides</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--sea:#7dcfff;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;flex-direction:column;height:100vh;padding:22px 30px}
+  .head{display:flex;align-items:flex-end;gap:16px;margin-bottom:8px}
+  .head .l{min-width:0}
+  .head h1{font-size:1.35rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.head h1 .ic{margin-right:8px}
+  .head .st{font-family:var(--mono);font-size:.8rem;color:var(--dim);margin-top:1px}
+  .head .sp{flex:1}
+  .next{text-align:right}
+  .next .lab{font-size:.85rem;color:var(--mid)}
+  .next .big{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1.7rem;font-weight:700;color:var(--sea)}
+  .next .sub{font-family:var(--mono);font-size:.85rem;color:var(--dim)}
+  .chartwrap{flex:1;min-height:0;position:relative;margin-top:6px}
+  .chartwrap canvas{position:absolute;inset:0;width:100%;height:100%}
+  #status{position:fixed;left:30px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><div class="l"><h1><span class="ic">🌊</span><span id="name">Tides</span></h1><div class="st" id="st"></div></div>
+      <span class="sp"></span>
+      <div class="next"><div class="lab" id="nlab">next tide</div><div class="big" id="nbig">—</div><div class="sub" id="nsub"></div></div>
+    </div>
+    <div class="chartwrap"><canvas id="c"></canvas></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={station:"9414290",stationName:"",units:"english"};
+  var $=function(i){return document.getElementById(i)}, last=0, curve=null, hilo=null, unit="ft";
+  function pad(n){return String(n).padStart(2,"0")}
+  function ymdhm(d){return d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())+" "+pad(d.getUTCHours())+pad(d.getUTCMinutes())}
+  function parseT(t){return new Date(t.replace(" ","T")+"Z")}  // NOAA gmt -> UTC instant
+  function hm(d){return d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}
+  function dur(ms){var m=Math.max(0,Math.round(ms/60000)),h=Math.floor(m/60);m=m%60;return h?h+"h "+m+"m":m+"m"}
+  function draw(){
+    if(!curve||!curve.length)return;
+    var cv=$("c"),ctx=cv.getContext("2d"),dpr=Math.min(window.devicePixelRatio||1,2);
+    var W=Math.round(cv.clientWidth*dpr),H=Math.round(cv.clientHeight*dpr);if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
+    ctx.clearRect(0,0,W,H);
+    var padL=8*dpr,padR=8*dpr,padT=26*dpr,padB=26*dpr;
+    var t0=curve[0].t,t1=curve[curve.length-1].t,trng=(t1-t0)||1;
+    var vs=curve.map(function(p){return p.v}),mn=Math.min.apply(null,vs),mx=Math.max.apply(null,vs),vr=(mx-mn)||1;
+    mn-=vr*0.12;mx+=vr*0.12;vr=mx-mn;
+    var X=function(t){return padL+(t-t0)/trng*(W-padL-padR)};
+    var Y=function(v){return H-padB-(v-mn)/vr*(H-padT-padB)};
+    // grid: midnight lines
+    ctx.strokeStyle="rgba(120,137,166,.10)";ctx.lineWidth=1;ctx.font=(9*dpr)+"px ui-monospace,monospace";ctx.fillStyle="rgba(120,137,166,.6)";ctx.textAlign="center";
+    for(var d=new Date(t0);d<=new Date(t1);d.setHours(d.getHours()+6)){
+      var dd=d.getTime();if(dd<t0)continue;var x=X(dd);ctx.beginPath();ctx.moveTo(x,padT);ctx.lineTo(x,H-padB);ctx.stroke();
+      ctx.fillText(hm(new Date(dd)),x,H-8*dpr);
+    }
+    // filled sea curve
+    ctx.beginPath();ctx.moveTo(X(t0),H-padB);
+    curve.forEach(function(p){ctx.lineTo(X(p.t),Y(p.v))});
+    ctx.lineTo(X(t1),H-padB);ctx.closePath();
+    var g=ctx.createLinearGradient(0,padT,0,H-padB);g.addColorStop(0,"rgba(125,207,255,.34)");g.addColorStop(1,"rgba(125,207,255,.04)");
+    ctx.fillStyle=g;ctx.fill();
+    ctx.beginPath();curve.forEach(function(p,i){var x=X(p.t),y=Y(p.v);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+    ctx.strokeStyle="#7dcfff";ctx.lineWidth=2*dpr;ctx.lineJoin="round";ctx.stroke();
+    // hi/lo markers
+    (hilo||[]).forEach(function(e){
+      if(e.t<t0||e.t>t1)return;var x=X(e.t),y=Y(e.v);
+      ctx.beginPath();ctx.arc(x,y,3.2*dpr,0,7);ctx.fillStyle=e.type==="H"?"#9ece6a":"#e0af68";ctx.fill();
+      ctx.fillStyle="rgba(230,233,239,.85)";ctx.font=(10*dpr)+"px ui-monospace,monospace";ctx.textAlign="center";
+      ctx.fillText((e.type==="H"?"H ":"L ")+e.v.toFixed(1),x,y+(e.type==="H"?-8*dpr:16*dpr));
+    });
+    // now line
+    var now=Date.now();if(now>=t0&&now<=t1){var nx=X(now);
+      ctx.strokeStyle="rgba(247,118,142,.9)";ctx.lineWidth=1.5*dpr;ctx.beginPath();ctx.moveTo(nx,padT-4*dpr);ctx.lineTo(nx,H-padB);ctx.stroke();
+      // interpolate current height
+      var cv2=curve,h=null;for(var i=1;i<cv2.length;i++){if(cv2[i].t>=now){var a=cv2[i-1],b=cv2[i],f=(now-a.t)/((b.t-a.t)||1);h=a.v+(b.v-a.v)*f;break}}
+      if(h!=null){var ny=Y(h);ctx.beginPath();ctx.arc(nx,ny,4*dpr,0,7);ctx.fillStyle="#f7768e";ctx.fill();}
+    }
+  }
+  function updateNext(){
+    if(!hilo)return;var now=Date.now();
+    var nx=hilo.filter(function(e){return e.t>now})[0];
+    if(!nx){$("nbig").textContent="—";return}
+    $("nlab").textContent=(nx.type==="H"?"next high tide":"next low tide");
+    $("nbig").textContent="in "+dur(nx.t-now);
+    $("nsub").textContent=hm(new Date(nx.t))+" · "+nx.v.toFixed(1)+" "+unit;
+  }
+  function render(){
+    $("name").textContent=settings.stationName||window.__tideName__||("Station "+settings.station);
+    $("st").textContent="NOAA "+settings.station;
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+    updateNext();draw();
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var st=settings.station, u=settings.units||"english";unit=u==="metric"?"m":"ft";
+      var begin=new Date(Date.now()-6*3600000), base="https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?application=vardek&datum=MLLW&time_zone=gmt&units="+u+"&format=json&station="+st+"&begin_date="+encodeURIComponent(ymdhm(begin))+"&range=48";
+      var cres=await xemd.proxy.fetch(base+"&product=predictions&interval=h",{headers:{Accept:"application/json"}});
+      if(!cres.ok)throw new Error("HTTP "+cres.status);
+      var cj=await cres.json();
+      if(cj.error)throw new Error(cj.error.message||"station error");
+      curve=(cj.predictions||[]).map(function(p){return{t:parseT(p.t).getTime(),v:parseFloat(p.v)}});
+      var hres=await xemd.proxy.fetch(base+"&product=predictions&interval=hilo",{headers:{Accept:"application/json"}});
+      var hj=hres.ok?await hres.json():{};
+      hilo=(hj.predictions||[]).map(function(p){return{t:parseT(p.t).getTime(),v:parseFloat(p.v),type:p.type}});
+      // station name (best-effort)
+      if(!settings.stationName&&!window.__tideName__){
+        try{var mres=await xemd.proxy.fetch("https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/"+st+".json",{headers:{Accept:"application/json"}});
+          if(mres.ok){var mj=await mres.json();if(mj.stations&&mj.stations[0])window.__tideName__=mj.stations[0].name}}catch(e){}
+      }
+      if(!curve.length)throw new Error("no predictions");
+      render();
+      $("status").className="";$("status").textContent="NOAA CO-OPS · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="tides api: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="tides unavailable — check station ID"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s){settings=Object.assign(settings,s);window.__tideName__=null}last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();
+    setInterval(load,1800000);setInterval(function(){if(curve){updateNext();draw()}},30000);
+    window.addEventListener("resize",draw);
+  })();
+</script></body></html>

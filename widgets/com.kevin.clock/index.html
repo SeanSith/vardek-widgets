@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clock</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --bg: #0b0e15; --surface: #161b28; --surface-2: #1b2130; --border: #2a3350;
+          --text: #e6e9ef; --text-mid: #8089a6; --text-dim: #565f89; --accent: #7aa2f7;
+          --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; }
+  #root { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3%; }
+  .date { color: var(--text-mid); font-weight: 500; }
+  .hidden { display: none !important; }
+
+  /* digital */
+  #digital .t { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: -0.01em; line-height: 1; }
+  #digital .t .sec { color: var(--accent); }
+  #digital .t .ampm { color: var(--text-mid); font-size: .4em; margin-left: .2em; }
+
+  /* flip */
+  #flip { display: flex; align-items: center; }
+  #flip .grp { display: flex; }
+  #flip .card { position: relative; background: linear-gradient(#20273a, #161b28); border-radius: .12em; margin: 0 .04em;
+                font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 700; line-height: 1.28;
+                width: .72em; text-align: center; box-shadow: inset 0 0 0 1px rgba(255,255,255,.03); overflow: hidden; }
+  #flip .card::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(0,0,0,.45); }
+  #flip .card.flip { animation: flip .3s ease; }
+  @keyframes flip { 0% { transform: perspective(200px) rotateX(0); } 50% { transform: perspective(200px) rotateX(-16deg); } 100% { transform: perspective(200px) rotateX(0); } }
+  #flip .colon { color: var(--accent); font-weight: 700; font-family: var(--mono); margin: 0 .06em; }
+
+  /* word */
+  #word { text-align: center; line-height: 1.28; font-weight: 700; letter-spacing: .02em; padding: 0 6%; }
+  #word .on { color: var(--text); } #word .off { color: #262d40; }
+
+  /* binary */
+  #binary { display: flex; gap: 6%; align-items: flex-end; }
+  #binary .col { display: flex; flex-direction: column; gap: 14%; }
+  #binary .dot { border-radius: 50%; border: 1px solid var(--border); background: transparent; }
+  #binary .dot.on { background: var(--accent); border-color: var(--accent); box-shadow: none; }
+  #binary .lab { text-align: center; font-family: var(--mono); color: var(--text-dim); margin-top: 8%; }
+
+  canvas { display: block; }
+</style>
+</head>
+<body>
+  <div id="root">
+    <canvas id="analog" class="hidden"></canvas>
+    <div id="digital" class="face hidden"><div class="t" id="dig"></div></div>
+    <div id="flip" class="face hidden"></div>
+    <div id="word" class="face hidden"></div>
+    <div id="binary" class="face hidden"></div>
+    <div class="date" id="date"></div>
+  </div>
+<script>
+(function () {
+  "use strict";
+  var settings = { style: "flip", use24Hour: true, showSeconds: true, showDate: true, accent: "#7aa2f7" };
+  var $ = function (id) { return document.getElementById(id); };
+  var root = $("root"), canvas = $("analog"), ctx = canvas.getContext("2d");
+  var W = 0, H = 0, dpr = 1, lastFlip = {};
+
+  function hours12(h) { return h % 12 || 12; }
+  function pad(n) { return String(n).padStart(2, "0"); }
+
+  function sizeMetrics() {
+    var cw = root.clientWidth, ch = root.clientHeight;
+    var showDate = settings.showDate !== false && ch > 120;
+    $("date").classList.toggle("hidden", !showDate);
+    return { cw: cw, ch: ch, showDate: showDate };
+  }
+
+  // ── digital ─────────────────────────────────────────────────────────
+  function renderDigital(now, m) {
+    var h = now.getHours(), mi = now.getMinutes(), s = now.getSeconds();
+    var t = settings.use24Hour !== false ? pad(h) : String(hours12(h));
+    var html = t + ":" + pad(mi);
+    if (settings.showSeconds !== false) html += '<span class="sec">:' + pad(s) + "</span>";
+    if (settings.use24Hour === false) html += '<span class="ampm">' + (h < 12 ? "AM" : "PM") + "</span>";
+    $("dig").innerHTML = html;
+    var chars = (settings.showSeconds !== false ? 8 : 5) + (settings.use24Hour === false ? 2 : 0);
+    $("dig").style.fontSize = Math.min(m.ch * (m.showDate ? 0.6 : 0.78), m.cw / chars * 1.55) + "px";
+  }
+
+  // ── flip ────────────────────────────────────────────────────────────
+  function buildFlip() {
+    var f = $("flip"); f.innerHTML = "";
+    var groups = [["h0", "h1"], ["m0", "m1"]];
+    if (settings.showSeconds !== false) groups.push(["s0", "s1"]);
+    groups.forEach(function (g, i) {
+      if (i > 0) { var col = document.createElement("span"); col.className = "colon"; col.textContent = ":"; f.appendChild(col); }
+      var grp = document.createElement("span"); grp.className = "grp";
+      g.forEach(function (id) { var c = document.createElement("span"); c.className = "card"; c.id = "fc-" + id; grp.appendChild(c); });
+      f.appendChild(grp);
+    });
+    lastFlip = {};
+  }
+  function renderFlip(now, m) {
+    var h = settings.use24Hour !== false ? now.getHours() : hours12(now.getHours());
+    var digits = { h0: Math.floor(h / 10), h1: h % 10, m0: Math.floor(now.getMinutes() / 10), m1: now.getMinutes() % 10,
+                   s0: Math.floor(now.getSeconds() / 10), s1: now.getSeconds() % 10 };
+    Object.keys(digits).forEach(function (id) {
+      var el = $("fc-" + id); if (!el) return;
+      if (lastFlip[id] !== digits[id]) { el.textContent = digits[id]; el.classList.remove("flip"); void el.offsetWidth; el.classList.add("flip"); lastFlip[id] = digits[id]; }
+    });
+    var cards = $("flip").querySelectorAll(".card").length;
+    var fs = Math.min(m.ch * (m.showDate ? 0.56 : 0.74), m.cw / (cards * 1.06 + 0.9));
+    $("flip").style.fontSize = fs + "px";
+  }
+
+  // ── analog ──────────────────────────────────────────────────────────
+  function renderAnalog(now, m) {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var size = Math.min(m.cw * 0.92, m.ch * (m.showDate ? 0.8 : 0.98)) * 0.98;
+    canvas.style.width = size + "px"; canvas.style.height = size + "px";
+    var px = Math.round(size * dpr); canvas.width = px; canvas.height = px;
+    var c = px / 2, R = px * 0.46;
+    ctx.clearRect(0, 0, px, px);
+    ctx.strokeStyle = "rgba(230,233,239,.15)"; ctx.lineWidth = 2 * dpr;
+    ctx.beginPath(); ctx.arc(c, c, R, 0, 7); ctx.stroke();
+    for (var i = 0; i < 60; i++) {
+      var a = i / 60 * 2 * Math.PI - Math.PI / 2, major = i % 5 === 0;
+      var r1 = R - (major ? R * 0.10 : R * 0.05), r2 = R - R * 0.02;
+      ctx.beginPath(); ctx.moveTo(c + Math.cos(a) * r1, c + Math.sin(a) * r1); ctx.lineTo(c + Math.cos(a) * r2, c + Math.sin(a) * r2);
+      ctx.strokeStyle = major ? "rgba(230,233,239,.6)" : "rgba(230,233,239,.22)"; ctx.lineWidth = (major ? 3 : 1.5) * dpr; ctx.stroke();
+    }
+    var h = now.getHours() % 12, mi = now.getMinutes(), s = now.getSeconds() + now.getMilliseconds() / 1000;
+    function hand(frac, len, w, col) {
+      var a = frac * 2 * Math.PI - Math.PI / 2;
+      ctx.beginPath(); ctx.moveTo(c - Math.cos(a) * len * 0.2, c - Math.sin(a) * len * 0.2);
+      ctx.lineTo(c + Math.cos(a) * len, c + Math.sin(a) * len);
+      ctx.strokeStyle = col; ctx.lineWidth = w * dpr; ctx.lineCap = "round"; ctx.stroke();
+    }
+    hand((h + mi / 60) / 12, R * 0.55, 5, "#e6e9ef");
+    hand((mi + s / 60) / 60, R * 0.82, 3.5, "#e6e9ef");
+    if (settings.showSeconds !== false) hand(s / 60, R * 0.9, 1.5, settings.accent);
+    ctx.beginPath(); ctx.arc(c, c, 5 * dpr, 0, 7); ctx.fillStyle = settings.accent; ctx.fill();
+  }
+
+  // ── word ────────────────────────────────────────────────────────────
+  var ONES = ["twelve", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven"];
+  function renderWord(now, m) {
+    var h = now.getHours(), mi = now.getMinutes();
+    var r5 = Math.round(mi / 5) * 5; var hh = h;
+    var mins = ["o'clock", "five past", "ten past", "quarter past", "twenty past", "twenty-five past", "half past",
+                "twenty-five to", "twenty to", "quarter to", "ten to", "five to", "o'clock"][r5 / 5];
+    if (r5 >= 35) hh = h + 1;              // "to" the next hour
+    if (r5 === 60) { hh = h + 1; }
+    var hName = ONES[hh % 12];
+    var line = r5 === 0 || r5 === 60 ? hName + " o'clock" : (mins.indexOf("past") >= 0 || mins.indexOf("to") >= 0 ? mins + " " + hName : hName + " " + mins);
+    var words = ("it is " + line).toUpperCase().split(" ");
+    $("word").innerHTML = words.map(function (w) { return '<span class="on">' + w + "</span>"; }).join(" ");
+    $("word").style.fontSize = Math.min(m.ch * (m.showDate ? 0.2 : 0.24), m.cw * 0.13) + "px";
+  }
+
+  // ── binary (BCD columns: H H M M S S) ───────────────────────────────
+  function buildBinary() {
+    var b = $("binary"); b.innerHTML = "";
+    var cols = settings.showSeconds !== false ? 6 : 4;
+    for (var i = 0; i < cols; i++) {
+      var col = document.createElement("div"); col.className = "col"; col.id = "bcol-" + i;
+      for (var r = 0; r < 4; r++) { var d = document.createElement("div"); d.className = "dot"; col.appendChild(d); }
+      b.appendChild(col);
+    }
+  }
+  function renderBinary(now, m) {
+    var h = settings.use24Hour !== false ? now.getHours() : hours12(now.getHours());
+    var vals = [Math.floor(h / 10), h % 10, Math.floor(now.getMinutes() / 10), now.getMinutes() % 10,
+                Math.floor(now.getSeconds() / 10), now.getSeconds() % 10];
+    var cols = settings.showSeconds !== false ? 6 : 4;
+    var dotSize = Math.min(m.cw / (cols * 1.8), m.ch * (m.showDate ? 0.16 : 0.19));
+    for (var i = 0; i < cols; i++) {
+      var col = $("bcol-" + i); if (!col) continue;
+      var dots = col.children;
+      for (var r = 0; r < 4; r++) {
+        var bit = (vals[i] >> (3 - r)) & 1;
+        dots[r].classList.toggle("on", !!bit);
+        dots[r].style.width = dotSize + "px"; dots[r].style.height = dotSize + "px";
+      }
+    }
+  }
+
+  // ── dispatch ────────────────────────────────────────────────────────
+  var built = "";
+  function show(id) { ["digital", "flip", "word", "binary"].forEach(function (x) { $(x).classList.toggle("hidden", x !== id); });
+    canvas.classList.toggle("hidden", id !== "analog"); }
+  function render() {
+    var now = new Date(), m = sizeMetrics();
+    var style = settings.style || "flip";
+    document.documentElement.style.setProperty("--accent", settings.accent || "#7aa2f7");
+    if (built !== style + (settings.showSeconds !== false) + (settings.use24Hour !== false)) {
+      if (style === "flip") buildFlip(); if (style === "binary") buildBinary();
+      built = style + (settings.showSeconds !== false) + (settings.use24Hour !== false);
+    }
+    show(style === "analog" ? "analog" : style);
+    if (style === "digital") renderDigital(now, m);
+    else if (style === "flip") renderFlip(now, m);
+    else if (style === "analog") renderAnalog(now, m);
+    else if (style === "word") renderWord(now, m);
+    else if (style === "binary") renderBinary(now, m);
+    if (m.showDate) $("date").textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+    $("date").style.fontSize = Math.max(11, Math.min(m.ch * 0.09, m.cw * 0.045)) + "px";
+  }
+
+  function apply() { settings = Object.assign(settings, (window.Vardek && Vardek.settings) || {}); built = ""; render(); }
+  document.addEventListener("vardek:ready", apply);
+  if (window.Vardek && Vardek.onResize) Vardek.onResize(render);
+  if (window.Vardek && Vardek.onSettingsChange) Vardek.onSettingsChange(function (s) { if (s) settings = Object.assign(settings, s); built = ""; render(); });
+  window.addEventListener("resize", render);
+  apply();
+  setInterval(render, settings.style === "analog" ? 100 : 250);
+})();
+</script>
+</body>
+</html>

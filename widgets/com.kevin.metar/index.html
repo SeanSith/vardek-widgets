@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>METAR</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--text-mid:#8089a6;--text-dim:#565f89;--mono:ui-monospace,'SF Mono',Menlo,monospace;
+    --vfr:#4caf50;--mvfr:#4a90d9;--ifr:#f7768e;--lifr:#bb5cf0}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;flex-direction:column;height:100vh;padding:16px 20px 10px}
+  .head{display:flex;align-items:center;gap:10px;margin-bottom:12px}.head h1{font-size:1.2rem;font-weight:700}.head .sp{flex:1}.head .upd{font-family:var(--mono);font-size:.76rem;color:var(--text-dim)}
+  #grid{flex:1;min-height:0;display:grid;gap:12px}
+  .st{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;min-width:0;overflow:hidden;position:relative}
+  .st .cat{position:absolute;right:0;top:0;bottom:0;width:5px}
+  .st.vfr .cat{background:var(--vfr)}.st.mvfr .cat{background:var(--mvfr)}.st.ifr .cat{background:var(--ifr)}.st.lifr .cat{background:var(--lifr)}
+  .st .top{display:flex;align-items:baseline;gap:10px}
+  .st .id{font-size:1.4rem;font-weight:700;font-family:var(--mono)}
+  .st .fc{font-family:var(--mono);font-size:.8rem;font-weight:700;padding:2px 7px;border-radius:5px}
+  .st.vfr .fc{color:var(--vfr);border:1px solid var(--vfr)}.st.mvfr .fc{color:var(--mvfr);border:1px solid var(--mvfr)}.st.ifr .fc{color:var(--ifr);border:1px solid var(--ifr)}.st.lifr .fc{color:var(--lifr);border:1px solid var(--lifr)}
+  .st .big{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:2.1rem;font-weight:700;margin-top:6px}
+  .st .row{display:flex;flex-wrap:wrap;gap:6px 16px;font-family:var(--mono);font-size:.88rem;color:var(--text-mid);margin-top:6px}
+  .st .row b{color:var(--text);font-weight:600}
+  .st .raw{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);margin-top:auto;padding-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .err{grid-column:1/-1;align-self:center;text-align:center;color:#f7768e;font-family:var(--mono);font-size:.85rem;padding:20px}
+</style></head>
+<body>
+  <div id="wrap"><div class="head"><span style="font-size:1.3rem">🛫</span><h1>METAR</h1><span class="sp"></span><span class="upd" id="upd">loading…</span></div><div id="grid"></div></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={airports:"KSFO,KOAK,KSJC,KLAX",units:"fahrenheit"}, $=function(i){return document.getElementById(i)}, last=0, cache=null;
+  function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+  function cat(m){ if(m.fltcat)return m.fltcat.toLowerCase();
+    // derive from visibility + ceiling if absent
+    var vis=parseFloat(String(m.visib).replace("+",""))||99;
+    var ceil=99999;(m.clouds||[]).forEach(function(c){if((c.cover==="BKN"||c.cover==="OVC")&&c.base!=null)ceil=Math.min(ceil,c.base)});
+    if(vis<1||ceil<500)return"lifr";if(vis<3||ceil<1000)return"ifr";if(vis<=5||ceil<=3000)return"mvfr";return"vfr"; }
+  function temp(c){ if(c==null)return"—";return settings.units==="fahrenheit"?Math.round(c*9/5+32)+"°F":Math.round(c)+"°C" }
+  function layout(n){var cw=$("grid").clientWidth,ch=$("grid").clientHeight;var cols=ch<200?n:(cw/ch>=1.7?Math.min(n,n<=2?n:2):1);
+    $("grid").style.gridTemplateColumns="repeat("+cols+",1fr)";$("grid").style.gridTemplateRows="repeat("+Math.ceil(n/cols)+",1fr)"}
+  function render(metars){
+    var g=$("grid");g.textContent="";if(!metars.length){g.innerHTML='<div class="err">No data</div>';return}
+    layout(metars.length);
+    metars.forEach(function(m){
+      var c=cat(m),st=el("div","st "+c);st.appendChild(el("div","cat"));
+      var top=el("div","top");top.appendChild(el("span","id",m.icaoId||m.station||"?"));top.appendChild(el("span","fc",c.toUpperCase()));st.appendChild(top);
+      st.appendChild(el("div","big",temp(m.temp)));
+      var row=el("div","row");
+      var wind=m.wdir!=null?(m.wdir===0&&m.wspd?"VRB":m.wdir+"°")+" @ "+(m.wspd||0)+"kt"+(m.wgst?" G"+m.wgst:""):"calm";
+      row.innerHTML="<span>💨 <b>"+wind+"</b></span><span>👁 <b>"+(m.visib!=null?m.visib+"sm":"—")+"</b></span><span>⏲ <b>"+(m.altim?(m.altim/33.8639).toFixed(2)+'"':"—")+"</b></span><span>dew <b>"+temp(m.dewp)+"</b></span>";
+      st.appendChild(row);
+      st.appendChild(el("div","raw",m.rawOb||""));
+      g.appendChild(st);
+    });
+  }
+  async function load(){
+    if(Date.now()-last<8000)return;last=Date.now();
+    var ids=(settings.airports||"").split(",").map(function(s){return s.trim().toUpperCase()}).filter(Boolean).slice(0,8).join(",");
+    if(!ids){$("grid").innerHTML='<div class="err">Add ICAO codes in settings</div>';return}
+    try{
+      var res=await xemd.proxy.fetch("https://aviationweather.gov/api/data/metar?ids="+ids+"&format=json",{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var arr=await res.json();if(!arr.length)throw new Error("no data");
+      var order=ids.split(",");arr.sort(function(a,b){return order.indexOf(a.icaoId)-order.indexOf(b.icaoId)});
+      cache=arr;render(arr);$("upd").textContent="updated "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){ if(cache){$("upd").textContent="offline"} else {$("grid").innerHTML='<div class="err">aviationweather: '+(e.message||e)+'</div>'} }
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,600000);window.addEventListener("resize",function(){if(cache)render(cache)});
+  })();
+</script></body></html>

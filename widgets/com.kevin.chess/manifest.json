@@ -1,0 +1,43 @@
+{
+  "id": "com.kevin.chess",
+  "name": "Chess Puzzle",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 3600,
+  "permissions": {
+    "proxy": [
+      "https://lichess.org/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    }
+  ],
+  "settingsSchema": {
+    "revealSec": {
+      "type": "number",
+      "label": "Seconds before showing the move",
+      "default": 14
+    }
+  }
+}

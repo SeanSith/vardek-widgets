@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Chess Puzzle</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--light:#e9edcc;--dark:#6b8f5e;--hl:#f7d26b;--sol:#7dcf87;--accent:#7aa2f7}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;padding:24px 30px;gap:34px;align-items:center}
+  .boardwrap{flex:0 0 auto;height:100%;display:flex;align-items:center;padding:8px 0}
+  .board{aspect-ratio:1/1;height:100%;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);
+    border-radius:8px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.4)}
+  .sq{display:flex;align-items:center;justify-content:center;position:relative;font-size:min(7vh,54px);line-height:1}
+  .sq.l{background:var(--light)}.sq.d{background:var(--dark)}
+  .sq.hl::before{content:"";position:absolute;inset:0;background:var(--hl);opacity:.5}
+  .sq.sol::before{content:"";position:absolute;inset:0;background:var(--sol);opacity:.55}
+  .sq .p{position:relative;z-index:1}
+  .sq .p.w{color:#fff;text-shadow:0 0 1px #000,0 1px 2px rgba(0,0,0,.5),0 0 2px #000}
+  .sq .p.b{color:#1a1a1a;text-shadow:0 1px 1px rgba(255,255,255,.25)}
+  .info{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:16px}
+  .turn{display:flex;align-items:center;gap:12px}
+  .turn .dot{width:22px;height:22px;border-radius:50%;border:2px solid var(--border)}
+  .turn .t{font-size:1.9rem;font-weight:700}
+  .rating{font-family:var(--mono);color:var(--mid);font-size:1.05rem}
+  .themes{display:flex;flex-wrap:wrap;gap:8px}
+  .themes .chip{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:.85rem;color:var(--mid)}
+  .reveal{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--sol);border-radius:10px;padding:14px 16px;min-height:64px;display:flex;flex-direction:column;justify-content:center}
+  .reveal .lab{font-size:.78rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+  .reveal .mv{font-family:var(--mono);font-size:1.6rem;font-weight:700;color:var(--sol);margin-top:2px}
+  .reveal.hidden .mv{color:var(--dim)}
+  .src{font-family:var(--mono);font-size:.8rem;color:var(--dim)}
+  #status{position:fixed;left:30px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:#f7768e}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="boardwrap"><div class="board" id="board"></div></div>
+    <div class="info">
+      <div class="turn"><span class="dot" id="turndot"></span><span class="t" id="turn"></span></div>
+      <div class="rating" id="rating"></div>
+      <div class="themes" id="themes"></div>
+      <div class="reveal hidden" id="reveal"><div class="lab" id="rlab">Find the move…</div><div class="mv" id="rmv">•••</div></div>
+      <div class="src">lichess daily puzzle</div>
+    </div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={revealSec:14};
+  var $=function(i){return document.getElementById(i)}, last=0, puz=null, cycle=null;
+  var GLYPH={k:"♚",q:"♛",r:"♜",b:"♝",n:"♞",p:"♟"};
+  function parseFEN(fen){
+    var parts=fen.split(" "),rows=parts[0].split("/"),turn=parts[1];
+    var grid=[];
+    for(var r=0;r<8;r++){var row=[],chars=rows[r];
+      for(var c=0;c<chars.length;c++){var ch=chars[c];
+        if(/\d/.test(ch)){for(var k=0;k<+ch;k++)row.push(null)}else row.push(ch)}
+      grid.push(row);
+    }
+    return {grid:grid,turn:turn};
+  }
+  function sqName(file,rank){return "abcdefgh"[file]+(8-rank)}
+  function drawBoard(fen,lastMove,solMove,showSol){
+    var f=parseFEN(fen),b=$("board");b.innerHTML="";
+    var hlSq={};
+    if(lastMove){hlSq[lastMove.slice(0,2)]="hl";hlSq[lastMove.slice(2,4)]="hl"}
+    if(showSol&&solMove){hlSq[solMove.slice(0,2)]="sol";hlSq[solMove.slice(2,4)]="sol"}
+    for(var r=0;r<8;r++)for(var c=0;c<8;c++){
+      var sq=document.createElement("div");
+      var name=sqName(c,r), mark=hlSq[name];
+      sq.className="sq "+(((r+c)%2===0)?"l":"d")+(mark?(" "+mark):"");
+      var pc=f.grid[r][c];
+      if(pc){var isW=pc===pc.toUpperCase();sq.innerHTML='<span class="p '+(isW?"w":"b")+'">'+GLYPH[pc.toLowerCase()]+'</span>'}
+      b.appendChild(sq);
+    }
+    return f.turn;
+  }
+  function render(){
+    var fen=puz.puzzle.fen, turn=drawBoard(fen,puz.puzzle.lastMove,puz.puzzle.solution[0],false);
+    var white=turn==="w";
+    $("turndot").style.background=white?"#fff":"#1a1a1a";
+    $("turn").textContent=(white?"White":"Black")+" to move";
+    $("rating").textContent="Rating "+puz.puzzle.rating+" · "+puz.puzzle.plays.toLocaleString()+" plays";
+    $("themes").innerHTML=(puz.puzzle.themes||[]).slice(0,5).map(function(t){return '<span class="chip">'+t.replace(/([A-Z])/g," $1").toLowerCase()+'</span>'}).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+    startCycle();
+  }
+  function startCycle(){
+    if(cycle)clearTimeout(cycle);
+    var revMs=Math.max(6,Number(settings.revealSec)||14)*1000, holdMs=7000;
+    function hide(){$("reveal").classList.add("hidden");$("rlab").textContent="Find the move…";$("rmv").textContent="•••";
+      drawBoard(puz.puzzle.fen,puz.puzzle.lastMove,puz.puzzle.solution[0],false);cycle=setTimeout(show,revMs)}
+    function show(){$("reveal").classList.remove("hidden");$("rlab").textContent="Best move";
+      var m=puz.puzzle.solution[0];$("rmv").textContent=m.slice(0,2)+"–"+m.slice(2,4);
+      drawBoard(puz.puzzle.fen,puz.puzzle.lastMove,m,true);cycle=setTimeout(hide,holdMs)}
+    hide();
+  }
+  async function load(){
+    if(Date.now()-last<60000)return; last=Date.now();
+    try{
+      var res=await xemd.proxy.fetch("https://lichess.org/api/puzzle/daily",{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      puz=await res.json();if(!puz.puzzle||!puz.puzzle.fen)throw new Error("no puzzle");
+      render();
+      $("status").className="";$("status").textContent="lichess · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="lichess: "+(e.message||e);if(!puz)$("boot").textContent="puzzle unavailable"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);if(puz)startCycle()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,3600000);
+  })();
+</script></body></html>

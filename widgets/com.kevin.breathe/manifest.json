@@ -1,0 +1,59 @@
+{
+  "id": "com.kevin.breathe",
+  "name": "Breathe",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    },
+    {
+      "cols": 4,
+      "rows": 1
+    },
+    {
+      "cols": 2,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "pattern": {
+      "type": "enum",
+      "label": "Pattern",
+      "values": [
+        "box",
+        "478",
+        "calm",
+        "coherent"
+      ],
+      "default": "box"
+    },
+    "accent": {
+      "type": "color",
+      "label": "Accent",
+      "default": "#7dcfff"
+    }
+  }
+}

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Countries</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#7dcfff}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;padding:30px 44px;gap:40px}
+  .flag{font-size:9rem;line-height:1;flex-shrink:0;filter:drop-shadow(0 4px 12px rgba(0,0,0,.5))}
+  .info{flex:1;min-width:0}
+  .inner{transition:opacity .5s}
+  .top{font-family:var(--mono);font-size:.85rem;color:var(--accent);text-transform:uppercase;letter-spacing:.06em}
+  .name{font-size:3.4rem;font-weight:800;line-height:1.05;margin:2px 0 14px}
+  .chips{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:16px}
+  .chip{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:7px 12px}
+  .chip .k{font-size:.7rem;color:var(--dim);text-transform:uppercase}
+  .chip .v{font-family:var(--mono);font-size:1.05rem;font-weight:600;margin-top:1px}
+  .fact{font-size:1.2rem;color:var(--mid);line-height:1.4;max-width:70ch}
+  .dots{display:flex;gap:6px;margin-top:18px}.dots i{width:6px;height:6px;border-radius:50%;background:var(--border);transition:background .3s,width .3s}.dots i.on{background:var(--accent);width:18px;border-radius:3px}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">…</div>
+  <div id="wrap" style="display:none">
+    <div class="flag" id="flag"></div>
+    <div class="info"><div class="inner" id="inner">
+      <div class="top" id="region"></div><div class="name" id="name"></div>
+      <div class="chips" id="chips"></div><div class="fact" id="fact"></div>
+    </div><div class="dots" id="dots"></div></div>
+  </div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={rotateSec:12,shuffle:true};
+  var $=function(i){return document.getElementById(i)}, idx=-1, order=[], timer=null, DOTS=8;
+  // name, flag, capital, pop(millions), region, languages, currency, fact
+  var C=[
+    ["Japan","🇯🇵","Tokyo",123.3,"Asia","Japanese","Yen","Has over 6,800 islands; only ~430 are inhabited."],
+    ["Iceland","🇮🇸","Reykjavík",0.37,"Europe","Icelandic","Króna","Runs almost entirely on geothermal & hydro power."],
+    ["Brazil","🇧🇷","Brasília",216,"S. America","Portuguese","Real","Home to ~60% of the Amazon rainforest."],
+    ["Kenya","🇰🇪","Nairobi",55,"Africa","Swahili, English","Shilling","The Great Rift Valley cuts across the country."],
+    ["New Zealand","🇳🇿","Wellington",5.2,"Oceania","English, Māori","Dollar","Has roughly 5 sheep for every person."],
+    ["Norway","🇳🇴","Oslo",5.5,"Europe","Norwegian","Krone","The midnight sun shines for weeks above the Arctic Circle."],
+    ["Morocco","🇲🇦","Rabat",37,"Africa","Arabic, Berber","Dirham","Fes has one of the world's oldest universities (859 AD)."],
+    ["Peru","🇵🇪","Lima",34,"S. America","Spanish, Quechua","Sol","Machu Picchu sits ~2,430 m above sea level."],
+    ["Switzerland","🇨🇭","Bern",8.8,"Europe","German, French, Italian","Franc","Has four official national languages."],
+    ["Mongolia","🇲🇳","Ulaanbaatar",3.4,"Asia","Mongolian","Tögrög","The most sparsely populated sovereign nation on Earth."],
+    ["Australia","🇦🇺","Canberra",26,"Oceania","English","Dollar","Home to 21 of the 25 most venomous snakes."],
+    ["Egypt","🇪🇬","Cairo",111,"Africa","Arabic","Pound","The Great Pyramid was the tallest structure for ~3,800 years."],
+    ["Canada","🇨🇦","Ottawa",40,"N. America","English, French","Dollar","Has more lakes than the rest of the world combined."],
+    ["Nepal","🇳🇵","Kathmandu",30,"Asia","Nepali","Rupee","The only country with a non-rectangular flag."],
+    ["Finland","🇫🇮","Helsinki",5.6,"Europe","Finnish, Swedish","Euro","Has ~188,000 lakes — the 'land of a thousand lakes'."],
+    ["Chile","🇨🇱","Santiago",19.6,"S. America","Spanish","Peso","The Atacama is the driest non-polar desert on Earth."],
+    ["Portugal","🇵🇹","Lisbon",10.3,"Europe","Portuguese","Euro","Lisbon is older than Rome by centuries."],
+    ["Vietnam","🇻🇳","Hanoi",98,"Asia","Vietnamese","Đồng","The world's largest cave, Sơn Đoòng, is here."],
+    ["South Africa","🇿🇦","Pretoria",60,"Africa","11 official langs","Rand","Has three capital cities."],
+    ["Argentina","🇦🇷","Buenos Aires",46,"S. America","Spanish","Peso","Aconcagua is the highest peak outside Asia."],
+    ["Ireland","🇮🇪","Dublin",5.1,"Europe","Irish, English","Euro","There are no wild snakes on the island."],
+    ["Thailand","🇹🇭","Bangkok",72,"Asia","Thai","Baht","The only Southeast Asian nation never colonized."],
+    ["Greece","🇬🇷","Athens",10.4,"Europe","Greek","Euro","Has around 6,000 islands and islets."],
+    ["Mexico","🇲🇽","Mexico City",128,"N. America","Spanish","Peso","Introduced chocolate, corn, and chilies to the world."],
+    ["Bhutan","🇧🇹","Thimphu",0.78,"Asia","Dzongkha","Ngultrum","Measures Gross National Happiness; carbon-negative."],
+    ["Netherlands","🇳🇱","Amsterdam",17.8,"Europe","Dutch","Euro","About a third of the land lies below sea level."],
+    ["Indonesia","🇮🇩","Jakarta",277,"Asia","Indonesian","Rupiah","An archipelago of more than 17,000 islands."],
+    ["Tanzania","🇹🇿","Dodoma",67,"Africa","Swahili, English","Shilling","Kilimanjaro is Africa's highest mountain."],
+    ["Italy","🇮🇹","Rome",59,"Europe","Italian","Euro","Has more UNESCO World Heritage sites than any country."],
+    ["Colombia","🇨🇴","Bogotá",52,"S. America","Spanish","Peso","The only source of emeralds of the finest quality."],
+    ["Turkey","🇹🇷","Ankara",85,"Eurasia","Turkish","Lira","Istanbul straddles two continents."],
+    ["Sweden","🇸🇪","Stockholm",10.5,"Europe","Swedish","Krona","Built on 14 islands connected by 57 bridges (capital)."],
+    ["Madagascar","🇲🇬","Antananarivo",30,"Africa","Malagasy, French","Ariary","~90% of its wildlife exists nowhere else."],
+    ["Singapore","🇸🇬","Singapore",5.9,"Asia","4 official langs","Dollar","A city-state and one of only three surviving city-states."],
+    ["Spain","🇪🇸","Madrid",48,"Europe","Spanish","Euro","Has the second-most UNESCO World Heritage sites."],
+    ["Ethiopia","🇪🇹","Addis Ababa",126,"Africa","Amharic","Birr","Uses its own calendar with 13 months."],
+    ["India","🇮🇳","New Delhi",1428,"Asia","Hindi, English +","Rupee","The most populous country in the world."],
+    ["Croatia","🇭🇷","Zagreb",3.9,"Europe","Croatian","Euro","The necktie originated here in the 17th century."],
+    ["Costa Rica","🇨🇷","San José",5.2,"C. America","Spanish","Colón","Abolished its army in 1948."],
+    ["Fiji","🇫🇯","Suva",0.93,"Oceania","English, Fijian","Dollar","Made up of more than 330 islands."]
+  ];
+  function shuffle(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function pop(m){return m>=1?(m>=100?Math.round(m):m.toFixed(1))+" M":Math.round(m*1000)+" K"}
+  function show(i){
+    idx=(i+order.length)%order.length;var c=C[order[idx]];
+    var inner=$("inner");inner.style.opacity="0";
+    setTimeout(function(){
+      $("flag").textContent=c[1];$("region").textContent=c[4];$("name").textContent=c[0];
+      $("chips").innerHTML=[["Capital",c[2]],["Population",pop(c[3])],["Language",c[5]],["Currency",c[6]]].map(function(x){return '<div class="chip"><div class="k">'+x[0]+'</div><div class="v">'+esc(x[1])+'</div></div>'}).join("");
+      $("fact").textContent=c[7];inner.style.opacity="1";
+      var d=$("dots").children;for(var k=0;k<d.length;k++)d[k].className=(k===idx%DOTS)?"on":"";
+    },260);
+  }
+  function schedule(){if(timer)clearInterval(timer);timer=setInterval(function(){show(idx+1)},Math.max(5,Number(settings.rotateSec)||12)*1000)}
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    order=C.map(function(_,i){return i});if(settings.shuffle!==false)shuffle(order);
+    $("dots").innerHTML=Array.from({length:Math.min(DOTS,order.length)}).map(function(){return"<i></i>"}).join("");
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);schedule()});
+    xemd.ready();$("boot").classList.add("hidden");$("wrap").style.display="flex";show(0);schedule();
+  })();
+</script></body></html>

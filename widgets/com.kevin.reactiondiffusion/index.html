@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Reaction Diffusion</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#05060a}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={pattern:"coral",palette:"ink"};
+  var PARAM={coral:[0.0545,0.062],mitosis:[0.0367,0.0649],maze:[0.029,0.057],spots:[0.025,0.06],flow:[0.078,0.061]};
+  var PAL={ink:[[10,14,24],[40,90,160],[180,220,255]],ember:[[12,4,4],[150,40,20],[255,210,120]],
+    bio:[[4,12,8],[20,120,80],[180,255,200]],gold:[[14,10,2],[150,110,20],[255,235,150]],frost:[[6,10,14],[40,120,150],[220,250,255]]};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d");
+  var off=document.createElement("canvas"),octx=off.getContext("2d"),img;
+  var W,H,dpr,gw,gh,A,B,A2,B2,feed,kill;
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;
+    gw=Math.min(220,Math.round(cv.clientWidth/6));gh=Math.round(gw*H/W);off.width=gw;off.height=gh;img=octx.createImageData(gw,gh);seed()}
+  function seed(){
+    var n=gw*gh;A=new Float32Array(n);B=new Float32Array(n);A2=new Float32Array(n);B2=new Float32Array(n);
+    for(var i=0;i<n;i++){A[i]=1;B[i]=0}
+    var p=PARAM[settings.pattern]||PARAM.coral;feed=p[0];kill=p[1];
+    for(var s=0;s<24;s++){var cx=Math.floor(Math.random()*gw),cy=Math.floor(Math.random()*gh),r=3+Math.floor(Math.random()*4);
+      for(var y=-r;y<=r;y++)for(var x=-r;x<=r;x++){var xx=(cx+x+gw)%gw,yy=(cy+y+gh)%gh;B[yy*gw+xx]=1}}
+  }
+  function step(){
+    var DA=1.0,DB=0.5;
+    for(var y=0;y<gh;y++)for(var x=0;x<gw;x++){var i=y*gw+x;
+      var xm=(x-1+gw)%gw,xp=(x+1)%gw,ym=(y-1+gh)%gh,yp=(y+1)%gh;
+      var lA=A[y*gw+xm]*0.2+A[y*gw+xp]*0.2+A[ym*gw+x]*0.2+A[yp*gw+x]*0.2+(A[ym*gw+xm]+A[ym*gw+xp]+A[yp*gw+xm]+A[yp*gw+xp])*0.05-A[i];
+      var lB=B[y*gw+xm]*0.2+B[y*gw+xp]*0.2+B[ym*gw+x]*0.2+B[yp*gw+x]*0.2+(B[ym*gw+xm]+B[ym*gw+xp]+B[yp*gw+xm]+B[yp*gw+xp])*0.05-B[i];
+      var a=A[i],b=B[i],abb=a*b*b;
+      A2[i]=a+(DA*lA-abb+feed*(1-a));B2[i]=b+(DB*lB+abb-(kill+feed)*b);
+    }
+    var t=A;A=A2;A2=t;t=B;B=B2;B2=t;
+  }
+  function draw(){
+    var pal=PAL[settings.palette]||PAL.ink,d=img.data;
+    for(var i=0;i<gw*gh;i++){var v=Math.max(0,Math.min(1,B[i]*2.2));
+      var c;if(v<0.5){var f=v/0.5;c=[pal[0][0]+(pal[1][0]-pal[0][0])*f,pal[0][1]+(pal[1][1]-pal[0][1])*f,pal[0][2]+(pal[1][2]-pal[0][2])*f]}
+      else{var f2=(v-0.5)/0.5;c=[pal[1][0]+(pal[2][0]-pal[1][0])*f2,pal[1][1]+(pal[2][1]-pal[1][1])*f2,pal[1][2]+(pal[2][2]-pal[1][2])*f2]}
+      var o=i*4;d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=255;}
+    octx.putImageData(img,0,0);ctx.imageSmoothingEnabled=true;ctx.drawImage(off,0,0,gw,gh,0,0,W,H);
+  }
+  function frame(){step();step();draw();requestAnimationFrame(frame)}
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);seed()});
+    xemd.ready();resize();requestAnimationFrame(frame);window.addEventListener("resize",resize);
+  })();
+</script></body></html>

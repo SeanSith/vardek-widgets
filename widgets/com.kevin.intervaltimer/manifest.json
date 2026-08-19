@@ -1,0 +1,68 @@
+{
+  "id": "com.kevin.intervaltimer",
+  "name": "Interval Timer",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 0,
+  "permissions": {
+    "proxy": [],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    },
+    {
+      "cols": 4,
+      "rows": 1
+    },
+    {
+      "cols": 2,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "workSec": {
+      "type": "number",
+      "label": "Work seconds",
+      "default": 40
+    },
+    "restSec": {
+      "type": "number",
+      "label": "Rest seconds",
+      "default": 20
+    },
+    "rounds": {
+      "type": "number",
+      "label": "Rounds",
+      "default": 8
+    },
+    "prepSec": {
+      "type": "number",
+      "label": "Prep seconds",
+      "default": 10
+    }
+  }
+}

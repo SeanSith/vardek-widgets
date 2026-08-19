@@ -1,0 +1,68 @@
+{
+  "id": "com.kevin.orrery",
+  "name": "Orrery",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 0,
+  "permissions": {
+    "proxy": [],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    },
+    {
+      "cols": 4,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "mode": {
+      "type": "enum",
+      "label": "Motion",
+      "values": [
+        "orbit",
+        "now"
+      ],
+      "default": "orbit"
+    },
+    "daysPerSec": {
+      "type": "number",
+      "label": "Days per second (orbit mode)",
+      "default": 6
+    },
+    "showLabels": {
+      "type": "boolean",
+      "label": "Planet labels",
+      "default": true
+    },
+    "showOrbits": {
+      "type": "boolean",
+      "label": "Orbit rings",
+      "default": true
+    }
+  }
+}

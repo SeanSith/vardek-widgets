@@ -1,0 +1,46 @@
+{
+  "id": "com.kevin.games",
+  "name": "Games",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    }
+  ],
+  "settingsSchema": {
+    "game": {
+      "type": "enum",
+      "label": "Game",
+      "values": [
+        "2048",
+        "snake",
+        "chessclock"
+      ],
+      "default": "2048"
+    },
+    "chessMinutes": {
+      "type": "number",
+      "label": "Chess clock minutes per side",
+      "default": 5
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "id": "com.kevin.iss",
+  "name": "ISS Tracker",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 20,
+  "permissions": {
+    "proxy": [
+      "https://api.wheretheiss.at/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 2,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    },
+    {
+      "cols": 4,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "latitude": {
+      "type": "number",
+      "label": "Your latitude",
+      "default": 37.7749
+    },
+    "longitude": {
+      "type": "number",
+      "label": "Your longitude",
+      "default": -122.4194
+    }
+  }
+}

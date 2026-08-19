@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Oscilloscope</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#020604}
+  #c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.55) 100%)}
+</style></head>
+<body>
+  <canvas id="c"></canvas><div id="vig"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={mode:"auto",phosphor:"green"};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d"),W=0,H=0,dpr=1;
+  var PH={green:[51,255,102],amber:[255,176,0],blue:[80,180,255],white:[210,235,220]};
+  var t=0, fx=3, fy=2, tfx=3, tfy=2, phase=0, morphAt=0, mode="lissajous", modeAt=0;
+  function rgb(a){var c=PH[settings.phosphor]||PH.green;return "rgba("+c[0]+","+c[1]+","+c[2]+","+a+")"}
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;ctx.fillStyle="#020604";ctx.fillRect(0,0,W,H)}
+  function grid(){
+    ctx.strokeStyle=rgb(0.07);ctx.lineWidth=1;var cx=W/2,cy=H/2,dv=Math.min(W,H)/10;
+    for(var gx=cx%dv;gx<W;gx+=dv){ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,H);ctx.stroke()}
+    for(var gy=cy%dv;gy<H;gy+=dv){ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W,gy);ctx.stroke()}
+    ctx.strokeStyle=rgb(0.14);ctx.beginPath();ctx.moveTo(0,cy);ctx.lineTo(W,cy);ctx.moveTo(cx,0);ctx.lineTo(cx,H);ctx.stroke();
+  }
+  function pickRatio(){var opts=[[1,2],[2,3],[3,2],[3,4],[4,3],[5,4],[3,5],[1,3],[5,3],[2,1]];var r=opts[Math.floor(Math.random()*opts.length)];tfx=r[0];tfy=r[1]}
+  function frame(){
+    // phosphor persistence
+    ctx.fillStyle="rgba(2,6,4,0.08)";ctx.fillRect(0,0,W,H);
+    grid();
+    var cx=W/2,cy=H/2,A=Math.min(W,H)*0.40;
+    var m=settings.mode==="auto"?mode:settings.mode;
+    ctx.lineWidth=2*dpr;ctx.lineJoin="round";ctx.shadowColor=rgb(0.9);ctx.shadowBlur=10*dpr;
+    ctx.beginPath();
+    if(m==="waveform"){
+      var base=H*0.5;
+      for(var x=0;x<=W;x+=2){var u=x/W*Math.PI*2*fx + t;
+        var y=cy+Math.sin(u)*A*0.5+Math.sin(u*2+t*0.7)*A*0.18+Math.sin(u*3.5-t)*A*0.08;
+        x?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+    }else{
+      // lissajous, freqs ease toward target
+      fx+=(tfx-fx)*0.02;fy+=(tfy-fy)*0.02;
+      var N=1400;
+      for(var i=0;i<=N;i++){var T=i/N*Math.PI*2;
+        var px=cx+Math.sin(fx*T+phase)*A, py=cy+Math.sin(fy*T)*A;
+        i?ctx.lineTo(px,py):ctx.moveTo(px,py);}
+    }
+    ctx.strokeStyle=rgb(0.95);ctx.stroke();
+    ctx.shadowBlur=0;
+    // advance
+    t+=0.03; phase+=0.006;
+    morphAt++; if(morphAt>240){morphAt=0;pickRatio()}
+    if(settings.mode==="auto"){modeAt++;if(modeAt>900){modeAt=0;mode=mode==="lissajous"?"waveform":"lissajous"}}
+    requestAnimationFrame(frame);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s)});
+    xemd.ready();resize();pickRatio();fx=tfx;fy=tfy;requestAnimationFrame(frame);
+    window.addEventListener("resize",resize);
+  })();
+</script></body></html>

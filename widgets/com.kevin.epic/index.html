@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Earth (EPIC)</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#e6e9ef;
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #stage{position:absolute;inset:0;overflow:hidden;background:radial-gradient(circle at 50% 45%,#0a0f1a 0%,#000 70%)}
+  #img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity 1.4s ease}
+  #img.show{opacity:1}
+  #cap{position:absolute;left:0;bottom:0;padding:40px 40px 30px;display:none}
+  body.showinfo #cap{display:block}
+  #cap .date{font-family:ui-monospace,Menlo,monospace;font-size:.85rem;color:#8fadc8;letter-spacing:.05em;text-transform:uppercase}
+  #cap .title{font-size:1.9rem;font-weight:700;margin:3px 0 4px;text-shadow:0 2px 10px rgba(0,0,0,.8)}
+  #cap .loc{font-family:ui-monospace,Menlo,monospace;font-size:.95rem;color:#c8d2e0}
+  #cap .src{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;color:#5a6b7d;margin-top:8px}
+  #boot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#456;text-align:center;padding:30px}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="stage"><img id="img" alt="Earth from space"></div>
+  <div id="cap"><div class="date" id="date"></div><div class="title">Earth from DSCOVR</div><div class="loc" id="loc"></div><div class="src">NASA EPIC · ~1 million miles away</div></div>
+  <div id="boot">Waiting for epicd…<br><span style="font-size:.8rem;opacity:.7">run epicd once, or load its LaunchAgent</span></div>
+<script>
+(function(){
+  "use strict";
+  var settings={showInfo:true};var $=function(i){return document.getElementById(i)};var key="";
+  function dirLat(v){return Math.abs(v).toFixed(1)+"°"+(v>=0?"N":"S")}
+  function dirLon(v){return Math.abs(v).toFixed(1)+"°"+(v>=0?"E":"W")}
+  function render(d){
+    var img=$("img");img.onload=function(){img.classList.add("show");$("boot").classList.add("hidden")};
+    img.src=d.file+"?i="+(d.identifier||"");
+    var dt=d.date?new Date(d.date.replace(" ","T")+"Z"):null;
+    $("date").textContent=dt?dt.toLocaleString([],{month:"long",day:"numeric",year:"numeric",hour:"2-digit",minute:"2-digit"}):"";
+    if(d.lat!=null&&d.lon!=null)$("loc").textContent="Sun overhead near "+dirLat(d.lat)+" "+dirLon(d.lon);
+    document.body.classList.toggle("showinfo",settings.showInfo!==false);
+  }
+  function load(){
+    var s=document.createElement("script");s.src="data.js?v="+Date.now();
+    s.onload=function(){s.remove();var d=window.__EPIC__;if(!d)return;if(d.identifier!==key){key=d.identifier;render(d)}};
+    s.onerror=function(){s.remove();if(!key)$("boot").textContent="epicd not running — see README"};
+    document.head.appendChild(s);
+  }
+  if(window.Vardek&&Vardek.settings)settings=Object.assign(settings,Vardek.settings);
+  if(window.Vardek&&Vardek.onSettingsChange)Vardek.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);document.body.classList.toggle("showinfo",settings.showInfo!==false)});
+  if(window.Vardek&&Vardek.onRefresh)Vardek.onRefresh(load);
+  load();setInterval(load,120000);
+})();
+</script></body></html>

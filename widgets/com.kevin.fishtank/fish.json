@@ -1,0 +1,12 @@
+{
+  "nodeName": "MacBook-Pro-4-tank",
+  "sharedDir": "/Users/kevin/Cloud/Dropbox/.fishtank",
+  "capacity": 12,
+  "seedCount": 6,
+  "migrateEverySec": 45,
+  "migrateChance": 0.6,
+  "peerTimeoutSec": 25,
+  "handoffDeadlineSec": 40,
+  "heartbeatSec": 6,
+  "pollSec": 3
+}

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Stopwatch</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#7aa2f7;--fast:#6bd08a;--slow:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased;user-select:none}
+  #wrap{position:absolute;inset:0;display:flex;padding:30px 44px;gap:40px;align-items:center}
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px}
+  .time{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:6.5rem;line-height:1}
+  .time.run{color:var(--accent)}
+  .cs{font-size:3.5rem;color:var(--mid)}
+  .hint{color:var(--dim);font-size:.95rem}
+  .laps{flex:0 0 34%;min-width:0;max-height:100%;overflow:hidden;display:flex;flex-direction:column}
+  .laps .h{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+  .lap{display:grid;grid-template-columns:2.5em 1fr auto;gap:12px;font-family:var(--mono);padding:6px 2px;font-size:1rem}
+  .lap+.lap{border-top:1px solid rgba(42,51,80,.5)}
+  .lap .n{color:var(--dim)}.lap .t{font-weight:700;text-align:right}.lap .tot{color:var(--mid);text-align:right}
+  .lap.fast .t{color:var(--fast)}.lap.slow .t{color:var(--slow)}
+  .empty{color:var(--dim);font-size:.9rem}
+  .zones{position:absolute;inset:0;display:flex}.zones .z{flex:1}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="wrap" style="display:none">
+    <div class="main"><div class="time" id="time">00:00<span class="cs" id="cs">.00</span></div><div class="hint" id="hint">Tap right to start</div></div>
+    <div class="laps"><div class="h">Laps</div><div id="laplist"><div class="empty">No laps yet</div></div></div>
+  </div>
+  <div class="zones"><div class="z" id="zleft"></div><div class="z" id="zright"></div></div>
+  <div id="boot"></div>
+<script>
+(function(){
+  "use strict";
+  var $=function(i){return document.getElementById(i)};
+  var running=false,acc=0,startT=0,laps=[],raf=null;
+  function elapsed(){return acc+(running?(Date.now()-startT):0)}
+  function fmt(ms){var t=Math.max(0,ms),cs=Math.floor(t/10)%100,s=Math.floor(t/1000)%60,m=Math.floor(t/60000);
+    return {main:String(m).padStart(2,"0")+":"+String(s).padStart(2,"0"),cs:"."+String(cs).padStart(2,"0")}}
+  function draw(){
+    var f=fmt(elapsed());$("time").firstChild.nodeValue=f.main;$("cs").textContent=f.cs;
+    $("time").className="time"+(running?" run":"");
+    $("hint").textContent=running?"Tap right to stop · tap left to lap":(elapsed()>0?"Tap right to resume · tap left to reset":"Tap right to start");
+  }
+  function renderLaps(){
+    if(!laps.length){$("laplist").innerHTML='<div class="empty">No laps yet</div>';return}
+    var splits=laps.map(function(l,i){return i===0?l:l-laps[i-1]});
+    var mn=Math.min.apply(null,splits),mx=Math.max.apply(null,splits);
+    $("laplist").innerHTML=laps.map(function(l,i){var sp=splits[i],f=fmt(sp),tf=fmt(l);
+      var cls=laps.length>1?(sp===mn?" fast":(sp===mx?" slow":"")):"";
+      return '<div class="lap'+cls+'"><span class="n">'+(i+1)+'</span><span class="t">'+f.main+f.cs+'</span><span class="tot">'+tf.main+tf.cs+'</span></div>';
+    }).reverse().join("");
+  }
+  function loop(){draw();raf=requestAnimationFrame(loop)}
+  function toggle(){if(running){acc=elapsed();running=false}else{startT=Date.now();running=true}draw()}
+  function lapOrReset(){
+    if(running){laps.push(elapsed());renderLaps()}
+    else{running=false;acc=0;laps=[];renderLaps();draw()}
+  }
+  $("zright").addEventListener("click",toggle);
+  $("zleft").addEventListener("click",lapOrReset);
+  if(window.Vardek&&Vardek.ready)Vardek.ready();
+  $("wrap").style.display="flex";draw();loop();
+})();
+</script></body></html>

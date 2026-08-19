@@ -1,0 +1,58 @@
+{
+  "id": "com.kevin.airport",
+  "name": "Airport Traffic",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 20,
+  "permissions": {
+    "proxy": [
+      "https://api.adsb.lol/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "airport": {
+      "type": "string",
+      "label": "Airport name",
+      "default": "San Francisco (KSFO)"
+    },
+    "latitude": {
+      "type": "number",
+      "label": "Latitude",
+      "default": 37.6213
+    },
+    "longitude": {
+      "type": "number",
+      "label": "Longitude",
+      "default": -122.379
+    },
+    "radiusNm": {
+      "type": "number",
+      "label": "Radius (nautical miles)",
+      "default": 25
+    }
+  }
+}

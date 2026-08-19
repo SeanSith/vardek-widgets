@@ -1,0 +1,43 @@
+{
+  "id": "com.kevin.wiki",
+  "name": "Wikipedia",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 0,
+  "permissions": {
+    "proxy": [
+      "https://en.wikipedia.org/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "rotateSec": {
+      "type": "number",
+      "label": "Seconds per article",
+      "default": 14
+    }
+  }
+}

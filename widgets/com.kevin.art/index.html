@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Art</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0c0c0e;color:#eee;
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #stage{position:absolute;inset:0;overflow:hidden;background:radial-gradient(ellipse at center,#17171b 0%,#0a0a0c 80%)}
+  .layer{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:38px 44px 96px;opacity:0;transition:opacity 1s ease}
+  .layer.show{opacity:1}
+  .layer img{max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 12px 40px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.06)}
+  #cap{position:absolute;left:0;right:0;bottom:0;padding:22px 44px 26px;background:linear-gradient(transparent,rgba(0,0,0,.75));display:none}
+  body.cap #cap{display:block}
+  #cap .title{font-size:1.6rem;font-weight:600;font-style:italic}
+  #cap .artist{font-size:1.05rem;color:#c7c4bd;margin-top:3px}
+  #cap .meta{font-family:ui-monospace,Menlo,monospace;font-size:.8rem;color:#8a8780;margin-top:5px}
+  #boot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#556;text-align:center;padding:30px}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="stage"><div class="layer" id="A"></div><div class="layer" id="B"></div></div>
+  <div id="cap"><div class="title" id="title"></div><div class="artist" id="artist"></div><div class="meta" id="meta"></div></div>
+  <div id="boot">Waiting for artd…<br><span style="font-size:.8rem;opacity:.7">run artd once, or load its LaunchAgent</span></div>
+<script>
+(function(){
+  "use strict";
+  var settings={rotateSec:16,showCaption:true};var $=function(i){return document.getElementById(i)};
+  var works=[],idx=-1,cur="A",timer=null,dataKey="";
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function advance(){
+    if(!works.length)return;idx=(idx+1)%works.length;var w=works[idx];
+    var next=cur==="A"?"B":"A",layer=$(next),img=layer.querySelector("img")||document.createElement("img");
+    if(!img.parentNode){layer.appendChild(img)}
+    img.onload=function(){$(cur).classList.remove("show");layer.classList.add("show");cur=next;
+      $("title").textContent=w.title;$("artist").textContent=w.artist;
+      $("meta").textContent=[w.date,w.origin,w.medium].filter(Boolean).join(" · ");
+      $("boot").classList.add("hidden");};
+    img.src=w.file+"?i="+w.id;
+    document.body.classList.toggle("cap",settings.showCaption!==false);
+  }
+  function schedule(){if(timer)clearInterval(timer);timer=setInterval(advance,Math.max(6,Number(settings.rotateSec)||16)*1000)}
+  function load(){var s=document.createElement("script");s.src="data.js?v="+Date.now();
+    s.onload=function(){s.remove();var d=window.__ART__;if(!d)return;var key=(d.works||[]).map(function(w){return w.id}).join(",");
+      if(key!==dataKey){dataKey=key;works=d.works||[];idx=-1;if(works.length){advance();schedule()}}};
+    s.onerror=function(){s.remove();if(!works.length)$("boot").textContent="artd not running — see README"};
+    document.head.appendChild(s)}
+  if(window.Vardek&&Vardek.settings)settings=Object.assign(settings,Vardek.settings);
+  if(window.Vardek&&Vardek.onSettingsChange)Vardek.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);document.body.classList.toggle("cap",settings.showCaption!==false)});
+  if(window.Vardek&&Vardek.onRefresh)Vardek.onRefresh(load);
+  load();setInterval(load,60000);
+})();
+</script></body></html>

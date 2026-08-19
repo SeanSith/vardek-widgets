@@ -1,0 +1,41 @@
+{
+  "id": "com.kevin.worldclocks",
+  "name": "World Clocks",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "zones": {
+      "type": "string",
+      "label": "Cities (Name|IANA/Zone, comma-separated)",
+      "default": "San Francisco|America/Los_Angeles, New York|America/New_York, London|Europe/London, Tokyo|Asia/Tokyo"
+    },
+    "use24Hour": {
+      "type": "boolean",
+      "label": "24-hour clock",
+      "default": true
+    }
+  }
+}

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Dice Roller</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#bb9af7;--crit:#6bd08a;--fail:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased;user-select:none}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+  .die{width:min(52vh,300px);height:min(52vh,300px);position:relative;cursor:pointer}
+  .die svg{width:100%;height:100%}
+  .die .poly{fill:var(--surface);stroke:var(--accent);stroke-width:3;transition:fill .2s,stroke .2s}
+  .die .val{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:800;font-size:6rem}
+  .die.crit .poly{stroke:var(--crit)}.die.crit .val{color:var(--crit)}
+  .die.fail .poly{stroke:var(--fail)}.die.fail .val{color:var(--fail)}
+  .kind{font-family:var(--mono);color:var(--mid);font-size:1.05rem;letter-spacing:.05em}
+  .hist{display:flex;gap:8px;height:1.4rem;font-family:var(--mono);color:var(--dim);font-size:.9rem}
+  .picker{display:flex;gap:8px;margin-top:6px}
+  .picker .b{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 13px;font-family:var(--mono);font-size:1rem;color:var(--mid);cursor:pointer}
+  .picker .b.on{border-color:var(--accent);color:var(--accent)}
+  .hint{color:var(--dim);font-size:.85rem}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="wrap" style="display:none">
+    <div class="kind" id="kind">d20</div>
+    <div class="die" id="die"><svg viewBox="0 0 100 100"><polygon class="poly" id="poly" points="50,4 92,28 92,72 50,96 8,72 8,28"/></svg><div class="val" id="val">–</div></div>
+    <div class="hist" id="hist"></div>
+    <div class="picker" id="picker"></div>
+    <div class="hint">Tap the die to roll</div>
+  </div>
+  <div id="boot"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={die:"20"};
+  var $=function(i){return document.getElementById(i)};
+  var SHAPES={4:"50,6 94,90 6,90",6:"14,14 86,14 86,86 14,86",8:"50,4 92,50 50,96 8,50",10:"50,4 90,38 74,92 26,92 10,38",12:"50,3 79,15 96,44 88,77 62,95 38,95 12,77 4,44 21,15",20:"50,4 92,28 92,72 50,96 8,72 8,28",100:"50,4 92,28 92,72 50,96 8,72 8,28"};
+  var sides=20,rolling=false,hist=[];
+  function setDie(n){sides=n;$("kind").textContent="d"+n;$("poly").setAttribute("points",SHAPES[n]||SHAPES[20]);
+    Array.prototype.forEach.call($("picker").children,function(b){b.classList.toggle("on",+b.dataset.n===n)});}
+  function roll(){
+    if(rolling)return;rolling=true;$("die").className="die";
+    var ticks=0,flick=setInterval(function(){$("val").textContent=1+Math.floor(Math.random()*sides);ticks++;
+      if(ticks>12){clearInterval(flick);var v=1+Math.floor(Math.random()*sides);$("val").textContent=v;
+        var fs=(v>=100?3.4:v>=10?5:6);$("val").style.fontSize=fs+"rem";
+        if(sides===20&&v===20)$("die").className="die crit";else if(sides===20&&v===1)$("die").className="die fail";
+        hist.unshift("d"+sides+":"+v);hist=hist.slice(0,6);$("hist").textContent=hist.join("  ");
+        rolling=false;}},45);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    $("picker").innerHTML=[4,6,8,10,12,20,100].map(function(n){return '<div class="b" data-n="'+n+'">d'+n+'</div>'}).join("");
+    Array.prototype.forEach.call($("picker").children,function(b){b.addEventListener("click",function(){setDie(+b.dataset.n);roll()})});
+    $("die").addEventListener("click",roll);
+    setDie(parseInt(settings.die,10)||20);
+    xemd.onSettingsChange(function(s){if(s){settings=Object.assign(settings,s);setDie(parseInt(settings.die,10)||20)}});
+    xemd.ready();$("wrap").style.display="flex";roll();
+  })();
+</script></body></html>

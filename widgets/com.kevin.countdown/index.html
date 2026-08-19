@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Countdown</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --bg: #0b0e15; --text: #e6e9ef; --text-mid: #8089a6; --text-dim: #565f89; --accent: #bb9af7;
+          --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; }
+  #root { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4%; padding: 4%; text-align: center; }
+  .title { color: var(--accent); font-weight: 700; letter-spacing: .02em; }
+  .units { display: flex; width: 100%; justify-content: space-evenly; align-items: flex-start; }
+  .u { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+  .u .n { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 700; line-height: 1; letter-spacing: -0.01em; }
+  .u .l { color: var(--text-dim); text-transform: uppercase; letter-spacing: .1em; margin-top: .5em; }
+  .sub { color: var(--text-mid); }
+  .done { color: var(--accent); font-weight: 700; }
+</style>
+</head>
+<body>
+  <div id="root">
+    <div class="title" id="title"></div>
+    <div class="units" id="units"></div>
+    <div class="sub" id="sub"></div>
+  </div>
+<script>
+(function () {
+  "use strict";
+  var settings = { title: "New Year", targetDate: "2027-01-01", accent: "#bb9af7" };
+  var $ = function (id) { return document.getElementById(id); };
+  var root = $("root");
+
+  function target() {
+    var s = (settings.targetDate || "").trim();
+    var d = new Date(s.indexOf("T") >= 0 ? s : s + "T00:00:00");
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function render() {
+    document.documentElement.style.setProperty("--accent", settings.accent || "#bb9af7");
+    $("title").textContent = settings.title || "";
+    var t = target();
+    var cw = root.clientWidth, ch = root.clientHeight;
+    $("title").style.fontSize = Math.max(14, Math.min(ch * 0.12, cw * 0.06)) + "px";
+    if (!t) { $("units").innerHTML = '<span class="done">Set a target date in settings</span>'; $("sub").textContent = ""; return; }
+    var diff = t.getTime() - Date.now(), past = diff < 0; diff = Math.abs(diff);
+    var d = Math.floor(diff / 86400000), h = Math.floor(diff / 3600000) % 24,
+        mi = Math.floor(diff / 60000) % 60, s = Math.floor(diff / 1000) % 60;
+    var units = [[d, "days"], [h, "hrs"], [mi, "min"], [s, "sec"]];
+    var box = $("units"); box.innerHTML = "";
+    var nSize = Math.max(18, Math.min(ch * (ch > 200 ? 0.42 : 0.55), cw / 4 * 0.6));
+    units.forEach(function (u) {
+      var el = document.createElement("div"); el.className = "u";
+      var n = document.createElement("div"); n.className = "n"; n.textContent = String(u[0]).padStart(2, "0"); n.style.fontSize = nSize + "px";
+      var l = document.createElement("div"); l.className = "l"; l.textContent = u[1]; l.style.fontSize = Math.max(9, nSize * 0.22) + "px";
+      el.appendChild(n); el.appendChild(l); box.appendChild(el);
+    });
+    var opts = { weekday: "short", year: "numeric", month: "short", day: "numeric" };
+    if ((settings.targetDate || "").indexOf("T") >= 0) { opts.hour = "2-digit"; opts.minute = "2-digit"; }
+    $("sub").textContent = (past ? "since " : "until ") + t.toLocaleDateString([], opts);
+    $("sub").style.fontSize = Math.max(11, Math.min(ch * 0.08, cw * 0.03)) + "px";
+    document.body.classList.toggle("past", past);
+  }
+
+  function apply() { settings = Object.assign(settings, (window.Vardek && Vardek.settings) || {}); render(); }
+  document.addEventListener("vardek:ready", apply);
+  if (window.Vardek && Vardek.onResize) Vardek.onResize(render);
+  if (window.Vardek && Vardek.onSettingsChange) Vardek.onSettingsChange(function (s) { if (s) settings = Object.assign(settings, s); render(); });
+  window.addEventListener("resize", render);
+  apply();
+  setInterval(render, 500);
+})();
+</script>
+</body>
+</html>

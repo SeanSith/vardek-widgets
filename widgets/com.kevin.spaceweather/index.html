@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Space Weather</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#080611;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--text-mid:#8089a6;--text-dim:#565f89;--mono:ui-monospace,'SF Mono',Menlo,monospace;
+    --q:#4caf50;--unsettled:#e0af68;--storm:#f7768e;--aurora:#7dfaa0}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;flex-direction:column;height:100vh;padding:18px 24px}
+  .head{display:flex;align-items:center;gap:10px}.head h1{font-size:1.2rem;font-weight:700}.head .sp{flex:1}.head .upd{font-family:var(--mono);font-size:.76rem;color:var(--text-dim)}
+  .main{flex:1;min-height:0;display:flex;align-items:center;gap:34px;margin-top:8px}
+  .kp{display:flex;flex-direction:column;align-items:center}
+  .kp .val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:800;line-height:1}
+  .kp .lab{color:var(--text-dim);text-transform:uppercase;letter-spacing:.12em;font-size:.75rem;margin-top:4px}
+  .kp .cond{font-family:var(--mono);font-weight:600;margin-top:4px}
+  .cond.quiet{color:var(--q)}.cond.unsettled{color:var(--unsettled)}.cond.storm{color:var(--storm)}
+  .info{flex:1;min-width:0}
+  .info .aurora{font-size:1.4rem;font-weight:700}.info .aurora.on{color:var(--aurora)}
+  .info .rows{margin-top:10px;display:flex;flex-direction:column;gap:6px;font-family:var(--mono);font-size:.9rem;color:var(--text-mid)}
+  .info .rows b{color:var(--text)}
+  .chart{margin-top:14px}.chart .lbl{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px}
+  canvas{width:100%;height:70px}
+  #status{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);margin-top:6px}#status.err{color:#f7768e}
+  @media(max-width:640px){.main{flex-direction:column;gap:14px;align-items:flex-start}}
+</style></head>
+<body>
+  <div id="wrap">
+    <div class="head"><span style="font-size:1.3rem">🌌</span><h1>Space Weather</h1><span class="sp"></span><span class="upd" id="upd">loading…</span></div>
+    <div class="main">
+      <div class="kp"><div class="val" id="kpval">—</div><div class="lab">Kp index</div><div class="cond" id="kpcond"></div></div>
+      <div class="info">
+        <div class="aurora" id="aurora"></div>
+        <div class="rows" id="rows"></div>
+      </div>
+    </div>
+    <div class="chart"><div class="lbl">Kp · last 24h</div><canvas id="c"></canvas></div>
+    <div id="status">connecting…</div>
+  </div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={latitude:37.7749}, $=function(i){return document.getElementById(i)}, last=0, hist=[], curKp=null;
+  var canvas=$("c"),ctx=canvas.getContext("2d");
+  function kpCond(k){return k<4?"quiet":k<5?"unsettled":"storm"}
+  function kpColor(k){return k<4?"#4caf50":k<5?"#e0af68":"#f7768e"}
+  // rough aurora visibility: geomagnetic lat threshold vs Kp
+  function auroraChance(kp,lat){var thresh=66.5-kp*2.5;var alat=Math.abs(lat);if(alat>=thresh)return"likely";if(alat>=thresh-5)return"possible";return "no"}
+  function draw(){
+    var dpr=Math.min(window.devicePixelRatio||1,2),w=Math.round(canvas.clientWidth*dpr),h=Math.round(canvas.clientHeight*dpr);
+    if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}
+    ctx.clearRect(0,0,w,h);var n=hist.length;if(!n)return;var gap=3*dpr,bw=(w-gap*(n-1))/n,base=h-2*dpr;
+    hist.forEach(function(k,i){var bh=k/9*(base-2*dpr);ctx.fillStyle=kpColor(k);ctx.globalAlpha=i===n-1?1:0.75;ctx.fillRect(i*(bw+gap),base-bh,bw,bh)});
+    ctx.globalAlpha=1;
+  }
+  function render(){
+    if(curKp==null)return;
+    $("kpval").textContent=curKp.toFixed(1);
+    $("kpval").style.color=kpColor(curKp);
+    var c=kpCond(curKp);$("kpcond").className="cond "+c;$("kpcond").textContent=c==="quiet"?"Quiet":c==="unsettled"?"Unsettled":"Storm G"+Math.max(1,Math.round(curKp-4));
+    var ch=auroraChance(curKp,Number(settings.latitude));
+    var a=$("aurora");a.className="aurora"+(ch!=="no"?" on":"");
+    a.textContent=ch==="likely"?"🟢 Aurora likely at your latitude":ch==="possible"?"🟡 Aurora possible tonight":"Aurora unlikely at your latitude";
+    $("rows").innerHTML="<div>Planetary Kp <b>"+curKp.toFixed(2)+"</b> · "+c+"</div>"
+      +"<div>Your latitude <b>"+Number(settings.latitude).toFixed(1)+"°</b></div>"
+      +"<div>Aurora oval reaches ~<b>"+(66.5-curKp*2.5).toFixed(0)+"° geomag</b></div>";
+    draw();
+  }
+  async function load(){
+    if(Date.now()-last<20000)return;last=Date.now();
+    try{
+      var res=await xemd.proxy.fetch("https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json",{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var rows=await res.json();
+      var vals=rows.map(function(r){return parseFloat(r.Kp)}).filter(function(x){return!isNaN(x)});
+      hist=vals.slice(-24);curKp=vals[vals.length-1];
+      render();$("upd").textContent="";$("status").className="";$("status").textContent="NOAA SWPC · updated "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="swpc: "+(e.message||e)}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);render()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,600000);window.addEventListener("resize",draw);
+  })();
+</script></body></html>

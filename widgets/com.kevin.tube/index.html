@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>London Underground</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--good:#6bd08a;--minor:#e0af68;--severe:#ff9e42;--bad:#f7768e;--closed:#7d8598;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:20px 28px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+  .head h1{font-size:1.3rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sp{flex:1}.head .upd{font-family:var(--mono);font-size:.78rem;color:var(--dim)}
+  #grid{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;align-content:center}
+  .ln{display:grid;grid-template-columns:6px 1fr auto;gap:13px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:11px 15px;overflow:hidden}
+  .ln .bar{width:6px;align-self:stretch;margin:-11px 0 -11px -15px;border-radius:3px 0 0 3px}
+  .ln .nm{font-size:1.1rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ln .st{font-family:var(--mono);font-size:.85rem;font-weight:700;white-space:nowrap;text-align:right}
+  .st.good{color:var(--good)}.st.minor{color:var(--minor)}.st.severe{color:var(--severe)}.st.bad{color:var(--bad)}.st.closed{color:var(--closed)}
+  #status{position:fixed;left:28px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">🚇</span>London Underground</h1><span class="sp"></span><span class="upd" id="upd"></span></div>
+    <div id="grid"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={modes:"tube,dlr,overground,elizabeth-line"};
+  var $=function(i){return document.getElementById(i)}, last=0;
+  var COL={"Bakerloo":"#B36305","Central":"#E32017","Circle":"#FFD300","District":"#00782A","Hammersmith & City":"#F3A9BB",
+    "Jubilee":"#A0A5A9","Metropolitan":"#9B0056","Northern":"#000000","Piccadilly":"#003688","Victoria":"#0098D4",
+    "Waterloo & City":"#95CDBA","DLR":"#00A4A7","Elizabeth line":"#6950A1","London Overground":"#EE7C0E",
+    "Liberty":"#61686B","Lioness":"#FFA600","Mildmay":"#0077AD","Suffragette":"#5BBD72","Weaver":"#823A62","Windrush":"#ED1B00"};
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function sevClass(s){s=(s||"").toLowerCase();
+    if(s.indexOf("good")>=0)return"good";if(s.indexOf("minor")>=0)return"minor";
+    if(s.indexOf("severe")>=0||s.indexOf("part")>=0)return"severe";
+    if(s.indexOf("suspend")>=0||s.indexOf("closed")>=0||s.indexOf("no service")>=0)return"bad";return"closed"}
+  function sevRank(s){var m={good:0,minor:1,severe:2,bad:3,closed:2};return m[sevClass(s)]!=null?m[sevClass(s)]:1}
+  function render(lines){
+    lines.sort(function(a,b){var sa=a.lineStatuses[0]?a.lineStatuses[0].statusSeverityDescription:"",sb=b.lineStatuses[0]?b.lineStatuses[0].statusSeverityDescription:"";return sevRank(sb)-sevRank(sa)});
+    $("grid").innerHTML=lines.slice(0,12).map(function(l){
+      var st=(l.lineStatuses&&l.lineStatuses[0]&&l.lineStatuses[0].statusSeverityDescription)||"—";
+      var col=COL[l.name]||"#7d8598";
+      return '<div class="ln"><div class="bar" style="background:'+col+'"></div>'
+        +'<div class="nm">'+esc(l.name)+'</div><div class="st '+sevClass(st)+'">'+esc(st)+'</div></div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var res=await xemd.proxy.fetch("https://api.tfl.gov.uk/line/mode/"+encodeURIComponent(settings.modes)+"/status",{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();if(!Array.isArray(d)||!d.length)throw new Error("no lines");
+      $("upd").textContent="London · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",timeZone:"Europe/London"});
+      render(d);
+      $("status").className="";$("status").textContent="TfL";
+    }catch(e){$("status").className="err";$("status").textContent="tfl: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="TfL data unavailable"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,120000);
+  })();
+</script></body></html>

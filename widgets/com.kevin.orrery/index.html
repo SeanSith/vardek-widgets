@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Orrery</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#05070d;color:#e6e9ef;
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #hud{position:absolute;left:22px;top:18px;pointer-events:none}
+  #hud .t{font-size:1.15rem;font-weight:700;letter-spacing:.03em}
+  #hud .d{font-family:ui-monospace,Menlo,monospace;font-size:.85rem;color:#8089a6;margin-top:2px}
+  #hud .m{font-family:ui-monospace,Menlo,monospace;font-size:.72rem;color:#565f89;margin-top:2px}
+</style></head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hud"><div class="t">Solar System</div><div class="d" id="date">—</div><div class="m" id="mode"></div></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={mode:"orbit",daysPerSec:6,showLabels:true,showOrbits:true};
+  var $=function(i){return document.getElementById(i)};
+  var cv=$("c"),ctx=cv.getContext("2d"),W=0,H=0,dpr=1;
+  var J2000=Date.UTC(2000,0,1,12,0,0);
+  // name, L0(deg mean longitude @J2000), period(days), AU, color, displayRadius, ring?
+  var PL=[
+    ["Mercury",252.25,87.969,0.387,"#b7b7b7",3.2,false],
+    ["Venus",181.98,224.701,0.723,"#e8c17a",5.2,false],
+    ["Earth",100.46,365.256,1.000,"#4a90d9",5.6,false],
+    ["Mars",355.43,686.980,1.524,"#d9634a",4.2,false],
+    ["Jupiter",34.35,4332.589,5.203,"#d9a066",10.5,false],
+    ["Saturn",49.94,10759.22,9.537,"#e0c07a",9.0,true],
+    ["Uranus",313.23,30685.4,19.19,"#8fe0ea",6.8,false],
+    ["Neptune",304.88,60189.0,30.07,"#5a78e0",6.6,false]];
+  var rmin=Math.pow(0.387,0.42), rmax=Math.pow(30.07,0.42);
+  var simMs=Date.now(), lastFrame=0;
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H}
+  function ringRadius(au,R0,Rspan){var f=(Math.pow(au,0.42)-rmin)/(rmax-rmin);return R0+f*Rspan}
+  function frame(ts){
+    if(!lastFrame)lastFrame=ts;var dt=(ts-lastFrame)/1000;lastFrame=ts;
+    if(settings.mode==="now")simMs=Date.now();
+    else simMs+=dt*(Number(settings.daysPerSec)||6)*86400000;
+    draw();requestAnimationFrame(frame);
+  }
+  function draw(){
+    if(cv.clientWidth*dpr!==W||cv.clientHeight*dpr!==H)resize();
+    ctx.clearRect(0,0,W,H);
+    var cx=W/2,cy=H/2, R0=34*dpr, Rspan=Math.min(W,H)/2-R0-42*dpr;
+    // orbit rings
+    if(settings.showOrbits!==false){
+      PL.forEach(function(p){var r=ringRadius(p[3],R0,Rspan);
+        ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.strokeStyle="rgba(120,137,166,.13)";ctx.lineWidth=1;ctx.stroke()});
+    }
+    // sun
+    var g=ctx.createRadialGradient(cx,cy,0,cx,cy,26*dpr);
+    g.addColorStop(0,"#fff6d5");g.addColorStop(.4,"#ffd35a");g.addColorStop(1,"rgba(255,180,40,0)");
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,26*dpr,0,7);ctx.fill();
+    ctx.fillStyle="#ffdf7a";ctx.beginPath();ctx.arc(cx,cy,8*dpr,0,7);ctx.fill();
+    var days=(simMs-J2000)/86400000;
+    PL.forEach(function(p){
+      var L=((p[1]+360*days/p[2])%360)*Math.PI/180;
+      var r=ringRadius(p[3],R0,Rspan);
+      var x=cx+Math.cos(L)*r, y=cy+Math.sin(L)*r, pr=p[5]*dpr;
+      // trailing arc for motion sense
+      ctx.beginPath();ctx.arc(cx,cy,r,L-0.5,L);ctx.strokeStyle=p[4]+"55";ctx.lineWidth=1.5*dpr;ctx.stroke();
+      if(p[6]){ // Saturn ring
+        ctx.save();ctx.translate(x,y);ctx.rotate(-0.5);ctx.scale(1,0.38);
+        ctx.beginPath();ctx.arc(0,0,pr*1.9,0,7);ctx.strokeStyle=p[4]+"cc";ctx.lineWidth=2*dpr;ctx.stroke();ctx.restore();
+      }
+      var gp=ctx.createRadialGradient(x,y,0,x,y,pr);gp.addColorStop(0,p[4]);gp.addColorStop(1,p[4]+"aa");
+      ctx.fillStyle=gp;ctx.beginPath();ctx.arc(x,y,pr,0,7);ctx.fill();
+      ctx.beginPath();ctx.arc(x,y,pr,0,7);ctx.strokeStyle=p[4];ctx.lineWidth=1*dpr;ctx.globalAlpha=.5;ctx.stroke();ctx.globalAlpha=1;
+      if(settings.showLabels!==false){
+        ctx.fillStyle="rgba(200,208,230,.7)";ctx.font=(10*dpr)+"px ui-monospace,monospace";ctx.textAlign="center";
+        ctx.fillText(p[0],x,y-pr-6*dpr);
+      }
+    });
+    var sd=new Date(simMs);
+    $("date").textContent=sd.toLocaleDateString([],{year:"numeric",month:"short",day:"numeric"});
+    $("mode").textContent=settings.mode==="now"?"live positions":(Number(settings.daysPerSec)||6)+" days/sec";
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);if(settings.mode==="now")simMs=Date.now()});
+    xemd.ready();resize();requestAnimationFrame(frame);
+    window.addEventListener("resize",resize);
+  })();
+</script></body></html>

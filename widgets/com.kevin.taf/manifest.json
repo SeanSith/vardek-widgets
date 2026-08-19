@@ -1,0 +1,43 @@
+{
+  "id": "com.kevin.taf",
+  "name": "TAF Forecast",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 1800,
+  "permissions": {
+    "proxy": [
+      "https://aviationweather.gov/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "airport": {
+      "type": "string",
+      "label": "Airport ICAO (e.g. KSFO, KJFK, EGLL)",
+      "default": "KSFO"
+    }
+  }
+}

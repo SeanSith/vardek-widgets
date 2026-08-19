@@ -1,0 +1,43 @@
+{
+  "id": "com.kevin.spotify",
+  "name": "Now Playing",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [
+    "media"
+  ],
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "accentFromArt": {
+      "type": "boolean",
+      "label": "Tint accent from album art",
+      "default": true
+    },
+    "showProgress": {
+      "type": "boolean",
+      "label": "Show progress bar",
+      "default": true
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "folder": "~/Downloads",
+  "maxImages": 40,
+  "longestSide": 1600,
+  "recurse": false,
+  "rescanSec": 300
+}

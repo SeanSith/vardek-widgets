@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>xkcd</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;--mono:ui-monospace,'SF Mono',Menlo,monospace;--accent:#7aa2f7}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:20px 30px;gap:12px}
+  .top{display:flex;align-items:baseline;gap:12px;flex:0 0 auto}
+  .top .num{font-family:var(--mono);font-weight:700;color:var(--accent);font-size:1.1rem}
+  .top .title{font-size:1.5rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top .date{font-family:var(--mono);font-size:.8rem;color:var(--dim);margin-left:auto;white-space:nowrap}
+  .card{flex:1;min-height:0;background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden}
+  .card img{max-width:100%;max-height:100%;object-fit:contain}
+  .alt{flex:0 0 auto;color:var(--mid);font-size:1rem;line-height:1.4;font-style:italic;display:none}
+  body.showalt .alt{display:block}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim);text-align:center;padding:30px}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">Waiting for xkcdd…<br><span style="font-size:.8rem;opacity:.7">run xkcdd once, or load its LaunchAgent</span></div>
+  <div id="wrap" style="display:none">
+    <div class="top"><span class="num" id="num"></span><span class="title" id="title"></span><span class="date" id="date"></span></div>
+    <div class="card"><img id="img" alt=""></div>
+    <div class="alt" id="alt"></div>
+  </div>
+<script>
+(function(){
+  "use strict";
+  var settings={showAlt:true};var $=function(i){return document.getElementById(i)};var key="";
+  function render(d){
+    var img=$("img");img.onload=function(){$("boot").classList.add("hidden");$("wrap").style.display="flex"};
+    img.src=d.file+"?n="+d.num;img.alt=d.alt||"";
+    $("num").textContent="#"+d.num;$("title").textContent=d.title||"";$("date").textContent=d.date||"";
+    $("alt").textContent=d.alt||"";
+    document.body.classList.toggle("showalt",settings.showAlt!==false);
+  }
+  function load(){
+    var s=document.createElement("script");s.src="data.js?v="+Date.now();
+    s.onload=function(){s.remove();var d=window.__XKCD__;if(!d)return;if(d.num+""!==key){key=d.num+"";render(d)}};
+    s.onerror=function(){s.remove();if(!key)$("boot").textContent="xkcdd not running — see README"};
+    document.head.appendChild(s);
+  }
+  if(window.Vardek&&Vardek.settings)settings=Object.assign(settings,Vardek.settings);
+  if(window.Vardek&&Vardek.onSettingsChange)Vardek.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);document.body.classList.toggle("showalt",settings.showAlt!==false)});
+  if(window.Vardek&&Vardek.onRefresh)Vardek.onRefresh(load);
+  load();setInterval(load,120000);
+})();
+</script></body></html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>World Weather</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--night:#3b4a6b;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:20px 28px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+  .head h1{font-size:1.25rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sp{flex:1}.head .upd{font-family:var(--mono);font-size:.78rem;color:var(--dim)}
+  #grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-content:center}
+  .city{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:16px 18px;display:flex;align-items:center;gap:14px;overflow:hidden}
+  .city.night{background:linear-gradient(135deg,#131a2c,#161b28)}
+  .city .ic{font-size:2.6rem;flex-shrink:0;filter:drop-shadow(0 2px 4px rgba(0,0,0,.4))}
+  .city .m{min-width:0;flex:1}
+  .city .nm{font-size:1.15rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .city .cond{font-size:.82rem;color:var(--mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .city .tm{font-family:var(--mono);font-size:.78rem;color:var(--dim);margin-top:2px}
+  .city .tp{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:2.2rem;text-align:right}
+  #status{position:fixed;left:28px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">🌍</span>World Weather</h1><span class="sp"></span><span class="upd" id="upd"></span></div>
+    <div id="grid"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={cities:"San Francisco,37.77,-122.42;New York,40.71,-74.01;London,51.51,-0.13;Tokyo,35.68,139.69;Paris,48.85,2.35;Sydney,-33.87,151.21",units:"fahrenheit"};
+  var $=function(i){return document.getElementById(i)}, last=0;
+  var WMO={0:["Clear","☀️","🌙"],1:["Mainly clear","🌤️","🌙"],2:["Partly cloudy","⛅","☁️"],3:["Overcast","☁️","☁️"],45:["Fog","🌫️","🌫️"],48:["Fog","🌫️","🌫️"],
+    51:["Drizzle","🌦️","🌦️"],53:["Drizzle","🌦️","🌦️"],55:["Drizzle","🌧️","🌧️"],61:["Rain","🌦️","🌧️"],63:["Rain","🌧️","🌧️"],65:["Heavy rain","🌧️","🌧️"],
+    71:["Snow","🌨️","🌨️"],73:["Snow","❄️","❄️"],75:["Snow","❄️","❄️"],80:["Showers","🌦️","🌧️"],81:["Showers","🌧️","🌧️"],82:["Showers","⛈️","⛈️"],95:["Storm","⛈️","⛈️"],96:["Storm","⛈️","⛈️"],99:["Storm","⛈️","⛈️"]};
+  function parseCities(){return (settings.cities||"").split(";").map(function(s){var p=s.split(",");return {name:(p[0]||"").trim(),lat:parseFloat(p[1]),lon:parseFloat(p[2])}}).filter(function(c){return c.name&&!isNaN(c.lat)&&!isNaN(c.lon)}).slice(0,9)}
+  function esc(s){return String(s||"").replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function render(cities,arr){
+    var u=settings.units==="celsius"?"C":"F";
+    $("grid").innerHTML=cities.map(function(c,i){
+      var d=arr[i];if(!d||!d.current)return '<div class="city"><div class="m"><div class="nm">'+esc(c.name)+'</div><div class="cond">no data</div></div></div>';
+      var cur=d.current,isDay=cur.is_day!==0,w=WMO[cur.weather_code]||["—","🌡️","🌡️"];
+      var tm="";try{tm=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",timeZone:d.timezone})}catch(e){}
+      return '<div class="city'+(isDay?"":" night")+'"><div class="ic">'+(isDay?w[1]:w[2])+'</div>'
+        +'<div class="m"><div class="nm">'+esc(c.name)+'</div><div class="cond">'+w[0]+'</div><div class="tm">'+tm+'</div></div>'
+        +'<div class="tp">'+Math.round(cur.temperature_2m)+'°</div></div>';
+    }).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var cities=parseCities();if(!cities.length)throw new Error("no cities configured");
+      var lats=cities.map(function(c){return c.lat}).join(","),lons=cities.map(function(c){return c.lon}).join(",");
+      var url="https://api.open-meteo.com/v1/forecast?latitude="+lats+"&longitude="+lons+"&current=temperature_2m,is_day,weather_code&temperature_unit="+(settings.units||"fahrenheit")+"&timezone=auto";
+      var res=await xemd.proxy.fetch(url,{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();var arr=Array.isArray(d)?d:[d];
+      $("grid").style.gridTemplateColumns="repeat("+(cities.length<=4?2:3)+",1fr)";
+      render(cities,arr);
+      $("upd").textContent="updated "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+      $("status").className="";$("status").textContent="Open-Meteo";
+    }catch(e){$("status").className="err";$("status").textContent="weather: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="weather unavailable"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,600000);
+  })();
+</script></body></html>

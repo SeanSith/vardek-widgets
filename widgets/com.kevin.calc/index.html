@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Calculator</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--surface-2:#1b2130;--border:#2a3350;--text:#e6e9ef;--text-mid:#8089a6;--accent:#7aa2f7;--op:#e0af68;--mono:ui-monospace,'SF Mono',Menlo,monospace}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+  #root{height:100%;display:flex;flex-direction:column;padding:14px;gap:10px}
+  #disp{flex:0 0 auto;text-align:right;padding:6px 14px 0;overflow:hidden}
+  #expr{font-family:var(--mono);color:var(--text-dim);font-size:1rem;min-height:1.2em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #out{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #pad{flex:1;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(5,1fr);gap:8px;min-height:0}
+  .k{background:var(--surface);border:1px solid var(--border);border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:600;cursor:pointer;min-height:0;color:var(--text)}
+  .k:active{background:var(--surface-2);border-color:var(--accent)}
+  .k.op{color:var(--op)}.k.op.active{background:var(--op);color:#0b120c}
+  .k.fn{color:var(--text-mid)}.k.eq{background:var(--accent);color:#0b120c;border-color:transparent}
+  .k.wide{grid-column:span 2}
+</style></head>
+<body>
+  <div id="root">
+    <div id="disp"><div id="expr"></div><div id="out">0</div></div>
+    <div id="pad"></div>
+  </div>
+<script>
+(function(){
+  "use strict";
+  var $=function(i){return document.getElementById(i)};
+  var cur="0",prev=null,op=null,fresh=true,expr="";
+  var KEYS=[["AC","fn"],["±","fn"],["%","fn"],["÷","op"],
+            ["7"],["8"],["9"],["×","op"],
+            ["4"],["5"],["6"],["−","op"],
+            ["1"],["2"],["3"],["+","op"],
+            ["0","wide"],["."],["=","eq"]];
+  function build(){var pad=$("pad");pad.innerHTML="";KEYS.forEach(function(k){var b=document.createElement("div");b.className="k"+(k[1]?" "+k[1]:"");b.textContent=k[0];b.addEventListener("click",function(){press(k[0])});pad.appendChild(b)})}
+  function fmt(n){if(!isFinite(n))return"Error";var s=parseFloat(n.toPrecision(12)).toString();return s}
+  function apply(a,o,b){switch(o){case"+":return a+b;case"−":return a-b;case"×":return a*b;case"÷":return b===0?NaN:a/b}return b}
+  function press(k){
+    if(k>="0"&&k<="9"){cur=fresh?k:(cur==="0"?k:cur+k);fresh=false}
+    else if(k==="."){if(fresh){cur="0.";fresh=false}else if(cur.indexOf(".")<0)cur+="."}
+    else if(k==="AC"){cur="0";prev=null;op=null;fresh=true;expr=""}
+    else if(k==="±"){cur=(parseFloat(cur)*-1).toString()}
+    else if(k==="%"){cur=(parseFloat(cur)/100).toString();fresh=true}
+    else if(k==="+"||k==="−"||k==="×"||k==="÷"){
+      if(op&&!fresh){prev=apply(prev,op,parseFloat(cur));cur=fmt(prev)}
+      else prev=parseFloat(cur);
+      op=k;fresh=true;expr=fmt(prev)+" "+k;
+      hi(k);
+    }
+    else if(k==="="){ if(op){var r=apply(prev,op,parseFloat(cur));expr=fmt(prev)+" "+op+" "+cur+" =";cur=fmt(r);prev=null;op=null;fresh=true} }
+    render();
+  }
+  function hi(k){[].slice.call(document.querySelectorAll(".k.op")).forEach(function(b){b.classList.toggle("active",b.textContent===k&&op===k)})}
+  function render(){$("out").textContent=cur;$("expr").textContent=expr; if(!op)[].slice.call(document.querySelectorAll(".k.op")).forEach(function(b){b.classList.remove("active")});
+    var base=Math.min($("root").clientWidth,$("root").clientHeight);$("out").style.fontSize=Math.min($("root").clientWidth*0.16,base*0.24)+"px"}
+  window.addEventListener("resize",render);
+  document.addEventListener("vardek:ready",render);
+  build();render();
+})();
+</script></body></html>

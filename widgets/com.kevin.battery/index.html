@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Battery</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--text-mid:#8089a6;--text-dim:#565f89;--mono:ui-monospace,'SF Mono',Menlo,monospace;
+    --hi:#9ece6a;--mid:#e0af68;--lo:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;height:100vh;padding:22px 28px;gap:34px;align-items:center}
+  .mac{display:flex;align-items:center;gap:26px;flex-shrink:0}
+  .cell{position:relative;width:150px;height:74px;border:3px solid var(--text-mid);border-radius:12px;padding:5px}
+  .cell::after{content:"";position:absolute;right:-9px;top:50%;transform:translateY(-50%);width:6px;height:26px;background:var(--text-mid);border-radius:0 3px 3px 0}
+  .cell .fill{height:100%;border-radius:6px;transform-origin:left center;transition:transform .5s,background .5s}
+  .cell.hi .fill{background:var(--hi)}.cell.mid .fill{background:var(--mid)}.cell.lo .fill{background:var(--lo)}
+  .cell .bolt{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:32px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+  .mac .info .pct{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:3.2rem;line-height:1}
+  .mac .info .state{color:var(--text-mid);font-size:1rem;margin-top:2px}
+  .mac .info .chips{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .chip{font-family:var(--mono);font-size:.8rem;color:var(--text-mid);border:1px solid var(--border);border-radius:7px;padding:4px 9px}
+  .chip b{color:var(--text)}
+  .bt{flex:1;min-width:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;align-content:center}
+  .dev{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;min-width:0}
+  .dev .ic{font-size:1.5rem;flex-shrink:0}
+  .dev .m{min-width:0;flex:1}.dev .nm{font-size:.95rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dev .bar{height:6px;border-radius:3px;background:rgba(128,137,166,.2);margin-top:5px;overflow:hidden}
+  .dev .bar>div{height:100%;border-radius:3px}
+  .dev .pc{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1.1rem;font-weight:700}
+  .none{color:var(--text-dim);font-size:.9rem;align-self:center}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-dim)}#boot.hidden{display:none}
+  @media(max-width:900px){#wrap{flex-direction:column;align-items:stretch;gap:16px}.bt{grid-template-columns:1fr 1fr}}
+</style></head>
+<body>
+  <div id="boot">Waiting for batteryd…</div>
+  <div id="wrap" style="display:none">
+    <div class="mac" id="mac"></div>
+    <div class="bt" id="bt"></div>
+  </div>
+<script>
+(function(){
+  "use strict";
+  var $=function(i){return document.getElementById(i)};
+  function lvl(p){return p>50?"hi":p>=20?"mid":"lo"}
+  function col(p){return p>50?"#9ece6a":p>=20?"#e0af68":"#f7768e"}
+  function render(d){
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+    var devs=d.devices||[],mac=devs.filter(function(x){return x.kind==="mac"})[0],bt=devs.filter(function(x){return x.kind==="bt"});
+    var mc=$("mac");mc.innerHTML="";
+    if(mac){
+      var cell='<div class="cell '+lvl(mac.pct)+'"><div class="fill" style="width:100%;transform:scaleX('+Math.max(0.04,mac.pct/100)+')"></div>'+((mac.charging||mac.acPower)?'<div class="bolt">⚡</div>':'')+'</div>';
+      var st=mac.full?"Fully charged":mac.charging?"Charging"+(mac.remaining?" · "+mac.remaining+" to full":""):mac.acPower?"On AC power":(mac.remaining?mac.remaining+" remaining":"On battery");
+      var chips="";
+      if(mac.health!=null)chips+='<span class="chip">health <b>'+mac.health+'%</b></span>';
+      if(mac.cycles!=null)chips+='<span class="chip">cycles <b>'+mac.cycles+'</b></span>';
+      if(mac.tempC!=null)chips+='<span class="chip">temp <b>'+mac.tempC+'°C</b></span>';
+      mc.innerHTML=cell+'<div class="info"><div class="pct" style="color:'+col(mac.pct)+'">'+mac.pct+'%</div><div class="state">'+st+'</div><div class="chips">'+chips+'</div></div>';
+    }
+    var b=$("bt");b.innerHTML="";
+    if(bt.length){bt.forEach(function(x){
+      var el=document.createElement("div");el.className="dev";
+      el.innerHTML='<div class="ic">'+(x.icon||"🔵")+'</div><div class="m"><div class="nm">'+esc(x.name)+'</div><div class="bar"><div style="width:'+x.pct+'%;background:'+col(x.pct)+'"></div></div></div><div class="pc" style="color:'+col(x.pct)+'">'+x.pct+'%</div>';
+      b.appendChild(el);
+    });} else { b.innerHTML='<div class="none">No Bluetooth devices reporting battery</div>'; }
+  }
+  function esc(s){return String(s).replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  function load(){var s=document.createElement("script");s.src="data.js?v="+Date.now();s.onload=function(){s.remove();if(window.__BATTERY__)render(window.__BATTERY__)};s.onerror=function(){s.remove();$("boot").textContent="batteryd not running — see README"};document.head.appendChild(s)}
+  if(window.Vardek&&Vardek.onRefresh)Vardek.onRefresh(load);
+  load();setInterval(load,20000);
+})();
+</script></body></html>

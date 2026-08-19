@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Decide</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--text-mid:#8089a6;--text-dim:#565f89;--accent:#bb9af7}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none}
+  #root{position:relative;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4%}
+  #big{font-weight:800;line-height:1;text-align:center;transition:transform .1s}
+  #big.roll{animation:shake .4s}@keyframes shake{0%,100%{transform:scale(1)}25%{transform:scale(1.1) rotate(-4deg)}75%{transform:scale(1.1) rotate(4deg)}}
+  #sub{color:var(--text-mid);font-family:ui-monospace,Menlo,monospace}
+  #hint{color:var(--text-dim);font-size:.9rem}
+  .coin{font-size:.9em}.eight{color:var(--accent)}
+</style></head>
+<body>
+  <div id="root"><div id="big">🎲</div><div id="sub"></div><div id="hint">tap to roll</div></div>
+<script>
+(function(){
+  "use strict";
+  var settings={mode:"dice"};
+  var $=function(i){return document.getElementById(i)},root=$("root");
+  var EIGHT=["It is certain","Without a doubt","Yes definitely","You may rely on it","Most likely","Outlook good","Signs point to yes","Reply hazy, try again","Ask again later","Cannot predict now","Don't count on it","My reply is no","Very doubtful","Concentrate and ask again"];
+  var DICE=["⚀","⚁","⚂","⚃","⚄","⚅"];
+  function rnd(n){return Math.floor(Math.random()*n)}
+  function roll(){
+    var b=$("big"),s=$("sub"),m=settings.mode;
+    b.classList.remove("roll");void b.offsetWidth;b.classList.add("roll");
+    if(m==="coin"){var h=Math.random()<0.5;b.textContent=h?"🪙":"🪙";b.className="coin";s.textContent=h?"HEADS":"TAILS"}
+    else if(m==="8ball"){b.textContent="🎱";b.className="";s.className="eight";s.textContent=EIGHT[rnd(EIGHT.length)]}
+    else if(m==="yesno"){var y=Math.random()<0.5;b.textContent=y?"✅":"❌";b.className="";s.textContent=y?"YES":"NO"}
+    else{var d=rnd(6);b.textContent=DICE[d];b.className="";s.textContent=(d+1)+""}
+  }
+  function size(){var base=Math.min(root.clientWidth,root.clientHeight);$("big").style.fontSize=base*0.42+"px";$("sub").style.fontSize=Math.max(14,base*0.09)+"px";$("hint").style.fontSize=Math.max(11,base*0.05)+"px"}
+  root.addEventListener("click",function(){$("hint").style.display="none";roll()});
+  function apply(){settings=Object.assign(settings,(window.Vardek&&Vardek.settings)||{});var m=settings.mode;$("big").textContent=m==="coin"?"🪙":m==="8ball"?"🎱":m==="yesno"?"🤔":"🎲";$("sub").textContent="";size()}
+  document.addEventListener("vardek:ready",apply);
+  if(window.Vardek&&Vardek.onSettingsChange)Vardek.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);apply()});
+  if(window.Vardek&&Vardek.onResize)Vardek.onResize(size);
+  window.addEventListener("resize",size);
+  apply();
+})();
+</script></body></html>

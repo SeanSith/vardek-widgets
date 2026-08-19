@@ -1,0 +1,52 @@
+{
+  "id": "com.kevin.lobsters",
+  "name": "Lobsters",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 300,
+  "permissions": {
+    "proxy": [
+      "https://lobste.rs/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "feed": {
+      "type": "enum",
+      "label": "Feed",
+      "values": [
+        "hottest",
+        "newest"
+      ],
+      "default": "hottest"
+    },
+    "count": {
+      "type": "number",
+      "label": "Stories to show (max 25)",
+      "default": 14
+    }
+  }
+}

@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sun Clock</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0b0e15; --text: #e6e9ef; --text-mid: #8089a6; --text-dim: #565f89;
+    --gold: #f0a838; --border: #2a3350;
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; }
+  #root { position: relative; width: 100%; height: 100%; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* center readout, absolutely positioned over the dial centre */
+  #center { position: absolute; text-align: center; transform: translate(-50%, -50%); pointer-events: none; line-height: 1; }
+  #center .time { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: -0.01em; }
+  #center .time .ampm { font-size: .42em; color: var(--text-mid); margin-left: .3em; }
+  #center .date { color: var(--text-mid); margin-top: .5em; }
+  #center .loc { color: var(--gold); margin-top: .35em; font-weight: 600; }
+  #center .dl { font-family: var(--mono); color: var(--text-dim); margin-top: .5em; }
+
+  /* side detail panel (wide layouts) */
+  #side { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: none; flex-direction: column; gap: 14px;
+          padding-right: 30px; }
+  body.wide #side { display: flex; }
+  .ev { display: flex; align-items: center; gap: 12px; }
+  .ev .ico { width: 26px; text-align: center; font-size: 18px; }
+  .ev .lab { flex: 1; }
+  .ev .lab .k { font-size: .8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .08em; }
+  .ev .lab .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 1.35rem; font-weight: 600; margin-top: 1px; }
+  .ev.next .lab .k { color: var(--gold); }
+
+  /* compact caption for linear mode */
+  #caption { position: absolute; left: 0; right: 0; display: none; justify-content: space-between; font-family: var(--mono);
+             font-variant-numeric: tabular-nums; font-size: .8rem; color: var(--text-dim); padding: 0 4px; }
+  body.linear #center .date, body.linear #center .dl, body.linear #center .loc { display: none; }
+</style>
+</head>
+<body>
+  <div id="root">
+    <canvas id="c"></canvas>
+    <div id="center">
+      <div class="time" id="time">--:--</div>
+      <div class="loc" id="loc"></div>
+      <div class="date" id="date"></div>
+      <div class="dl" id="dl"></div>
+    </div>
+    <div id="side"></div>
+    <div id="caption"><span id="cap-l"></span><span id="cap-r"></span></div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+  var rad = Math.PI / 180;
+  var canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
+  var settings = { latitude: 37.7749, longitude: -122.4194, locationName: "San Francisco", use24Hour: true };
+  var W = 0, H = 0, dpr = 1;
+  var sun = null, sunKey = "";
+
+  // ── NOAA solar model for a given date + location ────────────────────
+  function computeSun(now) {
+    var lat = Number(settings.latitude) || 0, lon = Number(settings.longitude) || 0;
+    var tz = -now.getTimezoneOffset() / 60;
+    var startUTC = Date.UTC(now.getFullYear(), 0, 0);
+    var doy = Math.floor((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - startUTC) / 86400000);
+    var g = 2 * Math.PI / 365 * (doy - 1 + 0.5);
+    var eqtime = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g)
+                 - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+    var decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g)
+               + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+    var solarNoonMin = 720 - 4 * lon - eqtime + 60 * tz;
+    var solarNoon = solarNoonMin / 60;                     // hours, local
+    var sinLat = Math.sin(lat * rad), cosLat = Math.cos(lat * rad);
+    var sinDec = Math.sin(decl), cosDec = Math.cos(decl);
+
+    function altAt(frac) {                                  // sun altitude (deg) at day-fraction
+      var ha = (frac * 24 - solarNoon) * 15 * rad;          // hour angle
+      return Math.asin(sinLat * sinDec + cosLat * cosDec * Math.cos(ha)) / rad;
+    }
+    function crossing(altDeg) {                             // {rise,set} hours, or flags
+      var cosH = (Math.sin(altDeg * rad) - sinLat * sinDec) / (cosLat * cosDec);
+      if (cosH > 1) return { none: true };                 // never rises to this altitude
+      if (cosH < -1) return { always: true };              // always above
+      var ha = Math.acos(cosH) / rad, dh = ha / 15;
+      return { rise: solarNoon - dh, set: solarNoon + dh };
+    }
+    var sr = crossing(-0.833);
+    return {
+      lat: lat, lon: lon, decl: decl / rad, solarNoon: solarNoon, altAt: altAt,
+      sunrise: sr, civil: crossing(-6), nautical: crossing(-12), astro: crossing(-18), golden: crossing(6),
+      dayLen: (sr.rise != null) ? sr.set - sr.rise : (sr.always ? 24 : 0)
+    };
+  }
+
+  // ── sky colour as a function of sun altitude ────────────────────────
+  var STOPS = [
+    [ 60, [40, 116, 190]], [ 12, [58, 140, 210]], [ 6, [126, 168, 214]],
+    [  2, [240, 168, 70]], [ 0, [232, 98, 42]], [-4, [188, 72, 92]],
+    [ -6, [120, 60, 120]], [-12, [52, 64, 122]], [-14, [40, 48, 96]],
+    [-18, [22, 27, 58]], [-30, [9, 12, 26]]
+  ];
+  function altColor(alt) {
+    if (alt >= STOPS[0][0]) return STOPS[0][1];
+    for (var i = 0; i < STOPS.length - 1; i++) {
+      var a = STOPS[i], b = STOPS[i + 1];
+      if (alt <= a[0] && alt >= b[0]) {
+        var t = (alt - b[0]) / (a[0] - b[0]);
+        return [Math.round(b[1][0] + (a[1][0] - b[1][0]) * t),
+                Math.round(b[1][1] + (a[1][1] - b[1][1]) * t),
+                Math.round(b[1][2] + (a[1][2] - b[1][2]) * t)];
+    } }
+    return STOPS[STOPS.length - 1][1];
+  }
+  function rgb(c) { return "rgb(" + c[0] + "," + c[1] + "," + c[2] + ")"; }
+
+  // time-fraction (0..1 of local day) → canvas angle (rad). noon=top, 6am=right, 6pm=left, midnight=bottom
+  function angleOf(frac) { return -(frac - 0.25) * 2 * Math.PI; }
+  function fmtHM(h) { if (h == null) return "—"; var m = Math.round(((h % 24) + 24) % 24 * 60); var hh = Math.floor(m / 60), mm = m % 60;
+    if (settings.use24Hour !== false) return String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
+    var ap = hh < 12 ? "AM" : "PM", h12 = hh % 12 || 12; return h12 + ":" + String(mm).padStart(2, "0") + " " + ap; }
+  function fmtDur(h) { if (h == null || h < 0) return "—"; var m = Math.round(h * 60); return Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m"; }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var r = canvas.getBoundingClientRect();
+    W = Math.max(1, Math.round(r.width * dpr)); H = Math.max(1, Math.round(r.height * dpr));
+    if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+    layout();
+  }
+
+  var mode, dialCX, dialCY, dialR, ringW;
+  function layout() {
+    var cw = canvas.clientWidth, ch = canvas.clientHeight;
+    var body = document.body;
+    mode = ch < 210 ? "linear" : "radial";
+    body.classList.toggle("linear", mode === "linear");
+    if (mode === "linear") { body.classList.remove("wide"); return; }
+    var wide = cw / ch >= 1.7 && cw >= 560;
+    body.classList.toggle("wide", wide);
+    var side = document.getElementById("side");
+    if (wide) {
+      dialR = Math.min(ch * 0.46, cw * 0.28);
+      var panelW = Math.max(190, dialR * 0.78), gap = Math.max(40, dialR * 0.5);
+      var groupW = 2 * dialR + gap + panelW;
+      var left = Math.max(18, (cw - groupW) / 2);
+      dialCX = left + dialR;
+      side.style.right = left + "px"; side.style.width = panelW + "px"; side.style.paddingRight = "0px";
+    } else {
+      dialR = Math.min(cw, ch) * 0.41;
+      dialCX = cw / 2;
+    }
+    dialCY = ch / 2;
+    ringW = Math.max(10, dialR * 0.20);
+    // place center readout + scale its type to the dial
+    var center = document.getElementById("center");
+    center.style.left = dialCX + "px"; center.style.top = dialCY + "px";
+    var base = dialR;
+    document.getElementById("time").style.fontSize = (base * 0.30) + "px";
+    document.getElementById("loc").style.fontSize = (base * 0.11) + "px";
+    document.getElementById("date").style.fontSize = (base * 0.10) + "px";
+    document.getElementById("dl").style.fontSize = (base * 0.10) + "px";
+  }
+
+  function draw() {
+    var now = new Date();
+    var key = settings.latitude + "," + settings.longitude + "," + now.toDateString();
+    if (key !== sunKey) { sun = computeSun(now); sunKey = key; buildSide(); }
+    var fnow = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86400;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#0b0e15"; ctx.fillRect(0, 0, W, H);
+    if (mode === "linear") { drawLinear(now, fnow); }
+    else { drawDial(now, fnow); }
+    updateCenter(now, fnow);
+  }
+
+  function drawDial(now, fnow) {
+    var cx = dialCX * dpr, cy = dialCY * dpr, R = dialR * dpr, rw = ringW * dpr;
+    var rMid = R - rw / 2;
+    // sky ring — colour each slice by the real sun altitude at that time
+    var N = 288;
+    ctx.lineWidth = rw; ctx.lineCap = "butt";
+    for (var i = 0; i < N; i++) {
+      var f0 = i / N, f1 = (i + 1) / N;
+      ctx.beginPath();
+      ctx.strokeStyle = rgb(altColor(sun.altAt((f0 + f1) / 2)));
+      // extend each segment's end slightly past the next start so butt edges overlap (no seams)
+      ctx.arc(cx, cy, rMid, angleOf(f0), angleOf(f1 + 0.9 / N), true);
+      ctx.stroke();
+    }
+    // hour ticks
+    for (var h = 0; h < 24; h++) {
+      var a = angleOf(h / 24), major = h % 6 === 0;
+      var r1 = R - rw, r2 = R - rw - (major ? 9 : 4) * dpr;
+      ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+      ctx.strokeStyle = major ? "rgba(230,233,239,.5)" : "rgba(230,233,239,.2)"; ctx.lineWidth = (major ? 2 : 1) * dpr; ctx.stroke();
+    }
+    // hour numerals at 0/6/12/18
+    ctx.fillStyle = "rgba(200,208,225,.65)"; ctx.font = (rw * 0.42) + "px " + "-apple-system, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    [[12, "12"], [18, "18"], [0, "0"], [6, "6"]].forEach(function (p) {
+      var a = angleOf(p[0] / 24), rr = R - rw - 22 * dpr;
+      ctx.fillText(p[1], cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    });
+    // sunrise / sunset markers
+    function marker(frac, label, glyph) {
+      if (frac == null) return;
+      var a = angleOf(((frac / 24) % 1 + 1) % 1);
+      var rOut = R + 3 * dpr;
+      ctx.beginPath(); ctx.arc(cx + Math.cos(a) * rMid, cy + Math.sin(a) * rMid, 3.5 * dpr, 0, 7);
+      ctx.fillStyle = "#fff"; ctx.fill();
+      var lr = R + 15 * dpr, lx = cx + Math.cos(a) * lr, ly = cy + Math.sin(a) * lr;
+      ctx.fillStyle = "rgba(230,233,239,.8)"; ctx.font = (11 * dpr) + "px " + "-apple-system, sans-serif";
+      var align = Math.cos(a) > 0.2 ? "left" : Math.cos(a) < -0.2 ? "right" : "center";
+      var pad = 4 * dpr, tw = 52 * dpr;
+      if (align === "left") lx = Math.min(lx, W - pad - tw);
+      else if (align === "right") lx = Math.max(lx, pad + tw);
+      ctx.textAlign = align; ctx.fillText(glyph + " " + label, lx, ly);
+    }
+    if (sun.sunrise.rise != null) {
+      marker(sun.sunrise.rise, fmtHM(sun.sunrise.rise), "☀");
+      marker(sun.sunrise.set, fmtHM(sun.sunrise.set), "☾");
+    }
+    // current-time hand + sun/moon glyph on the ring
+    var an = angleOf(fnow);
+    var hx = cx + Math.cos(an) * (R - rw), hy = cy + Math.sin(an) * (R - rw);
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(hx, hy);
+    ctx.strokeStyle = "rgba(240,168,56,.9)"; ctx.lineWidth = 2 * dpr; ctx.stroke();
+    var gx = cx + Math.cos(an) * rMid, gy = cy + Math.sin(an) * rMid;
+    var up = sun.altAt(fnow) > -0.833;
+    ctx.beginPath(); ctx.arc(gx, gy, rw * 0.42, 0, 7);
+    if (up) {
+      var glow = ctx.createRadialGradient(gx, gy, 0, gx, gy, rw * 0.7);
+      glow.addColorStop(0, "#fff3d0"); glow.addColorStop(0.5, "#ffcf6b"); glow.addColorStop(1, "rgba(255,180,60,0)");
+      ctx.fillStyle = glow; ctx.fill();
+      ctx.beginPath(); ctx.arc(gx, gy, rw * 0.34, 0, 7); ctx.fillStyle = "#ffd76b"; ctx.fill();
+    } else {
+      ctx.fillStyle = "#cfd6e6"; ctx.fill();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath(); ctx.arc(gx + rw * 0.16, gy - rw * 0.12, rw * 0.30, 0, 7); ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+    }
+    // inner disc so the center text sits on a clean ground
+    ctx.beginPath(); ctx.arc(cx, cy, R - rw - 2 * dpr, 0, 7); ctx.fillStyle = "#0b0e15"; ctx.fill();
+  }
+
+  // linear day-arc bar for short cells
+  function drawLinear(now, fnow) {
+    var pad = 14 * dpr, barH = Math.min(H * 0.5, 46 * dpr);
+    var x0 = pad, x1 = W - pad, y0 = (H - barH) / 2 - 6 * dpr;
+    var N = 240;
+    for (var i = 0; i < N; i++) {
+      var f = (i + 0.5) / N;
+      ctx.fillStyle = rgb(altColor(sun.altAt(f)));
+      ctx.fillRect(x0 + (x1 - x0) * (i / N), y0, (x1 - x0) / N + 1, barH);
+    }
+    // sunrise/sunset ticks
+    function tick(frac) { if (frac == null) return; var x = x0 + (x1 - x0) * ((frac / 24) % 1);
+      ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(x - 1 * dpr, y0 - 4 * dpr, 2 * dpr, barH + 8 * dpr); }
+    if (sun.sunrise.rise != null) { tick(sun.sunrise.rise); tick(sun.sunrise.set); }
+    // current marker
+    var xn = x0 + (x1 - x0) * fnow;
+    ctx.beginPath(); ctx.arc(xn, y0 + barH / 2, barH * 0.42, 0, 7);
+    ctx.fillStyle = sun.altAt(fnow) > -0.833 ? "#ffd76b" : "#cfd6e6"; ctx.fill();
+    // place center time above the bar
+    var center = document.getElementById("center");
+    center.style.left = "50%"; center.style.top = (y0 / dpr - 4) + "px"; center.style.transform = "translate(-50%,-100%)";
+    document.getElementById("time").style.fontSize = Math.min(34, H / dpr * 0.28) + "px";
+    var cap = document.getElementById("caption");
+    cap.style.display = "flex"; cap.style.top = ((y0 + barH) / dpr + 6) + "px";
+    document.getElementById("cap-l").textContent = sun.sunrise.rise != null ? "☀ " + fmtHM(sun.sunrise.rise) : "polar";
+    document.getElementById("cap-r").textContent = sun.sunrise.set != null ? fmtHM(sun.sunrise.set) + " ☾" : "";
+  }
+
+  function updateCenter(now, fnow) {
+    var t = document.getElementById("time");
+    var h = now.getHours(), m = now.getMinutes();
+    if (settings.use24Hour !== false) t.textContent = String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+    else { var ap = h < 12 ? "AM" : "PM"; t.innerHTML = (h % 12 || 12) + ":" + String(m).padStart(2, "0") + '<span class="ampm">' + ap + "</span>"; }
+    if (mode === "linear") { document.getElementById("caption").style.display = "flex"; return; }
+    document.getElementById("caption").style.display = "none";
+    document.getElementById("loc").textContent = settings.locationName || "";
+    document.getElementById("date").textContent = now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    document.getElementById("dl").textContent = sun.dayLen ? "☀ " + fmtDur(sun.dayLen) : "";
+  }
+
+  function buildSide() {
+    var side = document.getElementById("side"); side.textContent = "";
+    if (!sun) return;
+    var now = new Date();
+    var fnow = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86400;
+    var nowH = fnow * 24;
+    var evs = [];
+    if (sun.sunrise.rise != null) {
+      evs.push({ k: "Sunrise", v: fmtHM(sun.sunrise.rise), i: "🌅", h: sun.sunrise.rise });
+      evs.push({ k: "Solar noon", v: fmtHM(sun.solarNoon), i: "☀️", h: sun.solarNoon });
+      evs.push({ k: "Sunset", v: fmtHM(sun.sunrise.set), i: "🌇", h: sun.sunrise.set });
+      evs.push({ k: "Day length", v: fmtDur(sun.dayLen), i: "⏱", h: null });
+    } else {
+      evs.push({ k: "Today", v: sun.sunrise.always ? "Midnight sun" : "Polar night", i: sun.sunrise.always ? "☀️" : "🌙", h: null });
+      evs.push({ k: "Solar noon", v: fmtHM(sun.solarNoon), i: "☀️", h: sun.solarNoon });
+    }
+    // mark the next upcoming event
+    var next = null;
+    evs.forEach(function (e) { if (e.h != null) { var d = ((e.h - nowH) % 24 + 24) % 24; if (next == null || d < next.d) next = { e: e, d: d }; } });
+    evs.forEach(function (e) {
+      var row = document.createElement("div"); row.className = "ev" + (next && e === next.e ? " next" : "");
+      var ico = document.createElement("div"); ico.className = "ico"; ico.textContent = e.i; row.appendChild(ico);
+      var lab = document.createElement("div"); lab.className = "lab";
+      var k = document.createElement("div"); k.className = "k"; k.textContent = (next && e === next.e ? "next · " : "") + e.k;
+      var v = document.createElement("div"); v.className = "v"; v.textContent = e.v;
+      lab.appendChild(k); lab.appendChild(v); row.appendChild(lab); side.appendChild(row);
+    });
+  }
+
+  function apply() { settings = Object.assign(settings, (window.Vardek && Vardek.settings) || {}); sunKey = ""; layout(); }
+  document.addEventListener("vardek:ready", apply);
+  if (window.Vardek && Vardek.onResize) Vardek.onResize(function () { resize(); });
+  if (window.Vardek && Vardek.onSettingsChange) Vardek.onSettingsChange(function (s) { if (s) settings = Object.assign(settings, s); sunKey = ""; layout(); });
+  window.addEventListener("resize", resize);
+  apply(); resize();
+  draw();
+  setInterval(draw, 1000);
+})();
+</script>
+</body>
+</html>

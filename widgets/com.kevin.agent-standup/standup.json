@@ -1,0 +1,9 @@
+{
+  "model": "claude-haiku-4-5",
+  "pollSeconds": 8,
+  "minIntervalSec": 90,
+  "maxAgeSec": 1800,
+  "cwd": "/tmp",
+  "maxSessions": 26,
+  "timeoutSec": 90
+}

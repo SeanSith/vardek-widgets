@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Astronomy Picture</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#e6e9ef;
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #stage{position:absolute;inset:0;overflow:hidden}
+  #img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s ease;will-change:transform}
+  #img.show{opacity:1}
+  body.kb #img.show{animation:kb 40s ease-in-out infinite alternate}
+  @keyframes kb{from{transform:scale(1) translate(0,0)}to{transform:scale(1.12) translate(-2%,-1.5%)}}
+  #cap{position:absolute;left:0;right:0;bottom:0;padding:60px 40px 30px;
+    background:linear-gradient(transparent,rgba(0,0,0,.35) 30%,rgba(0,0,0,.85));display:none}
+  body.cap #cap{display:block}
+  #cap .date{font-family:ui-monospace,Menlo,monospace;font-size:.85rem;color:#9aa2bd;letter-spacing:.05em;text-transform:uppercase}
+  #cap .title{font-size:2rem;font-weight:700;margin:3px 0 6px;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+  #cap .exp{font-size:1rem;line-height:1.45;color:#d4d8e4;max-width:105ch;
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  #cap .by{font-size:.85rem;color:#8089a6;margin-top:7px}
+  #vid{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;gap:10px}
+  #vid .t{font-size:1.8rem;font-weight:700}#vid .e{max-width:70ch;color:#b7bdd0;line-height:1.5}#vid .n{color:#7aa2f7;font-family:ui-monospace,monospace;font-size:.9rem}
+  #boot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#556;text-align:center;padding:30px}
+  #boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="stage"><img id="img" alt=""></div>
+  <div id="cap"><div class="date" id="date"></div><div class="title" id="title"></div><div class="exp" id="exp"></div><div class="by" id="by"></div></div>
+  <div id="vid"><div class="t" id="vt"></div><div class="e" id="ve"></div><div class="n">Video APOD — view at apod.nasa.gov</div></div>
+  <div id="boot">Waiting for apodd…<br><span style="font-size:.8rem;opacity:.7">run apodd once, or load its LaunchAgent</span></div>
+<script>
+(function(){
+  "use strict";
+  var settings={showText:true,kenBurns:true};var $=function(i){return document.getElementById(i)};var key="";
+  function apply(){settings=Object.assign(settings,(window.Vardek&&Vardek.settings)||{});
+    document.body.classList.toggle("kb",settings.kenBurns!==false)}
+  function render(d){
+    if(d.media_type==="video"||!d.file){
+      $("vid").style.display="flex";$("cap").style.display="none";$("img").classList.remove("show");
+      $("vt").textContent=d.title||"";$("ve").textContent=d.explanation||"";
+      $("boot").classList.add("hidden");return;
+    }
+    $("vid").style.display="none";
+    var img=$("img");img.onload=function(){img.classList.add("show");$("boot").classList.add("hidden")};
+    img.src=d.file+"?d="+(d.date||"");
+    $("date").textContent=d.date||"";$("title").textContent=d.title||"";
+    $("exp").textContent=d.explanation||"";
+    $("by").textContent=d.copyright?("© "+d.copyright):"NASA APOD";
+    document.body.classList.toggle("cap",settings.showText!==false);
+    document.body.classList.toggle("kb",settings.kenBurns!==false);
+  }
+  function load(){
+    var s=document.createElement("script");s.src="data.js?v="+Date.now();
+    s.onload=function(){s.remove();var d=window.__APOD__;if(!d)return;var k=(d.date||"")+"|"+(d.file||"");if(k!==key){key=k;render(d)}};
+    s.onerror=function(){s.remove();if(!key)$("boot").textContent="apodd not running — see README"};
+    document.head.appendChild(s);
+  }
+  if(window.Vardek&&Vardek.onSettingsChange)Vardek.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);
+    document.body.classList.toggle("cap",settings.showText!==false);document.body.classList.toggle("kb",settings.kenBurns!==false)});
+  if(window.Vardek&&Vardek.onRefresh)Vardek.onRefresh(load);
+  apply();load();setInterval(load,120000);
+})();
+</script></body></html>

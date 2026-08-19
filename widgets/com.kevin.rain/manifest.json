@@ -1,0 +1,57 @@
+{
+  "id": "com.kevin.rain",
+  "name": "Rain",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 600,
+  "permissions": {
+    "proxy": [
+      "https://api.open-meteo.com/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "latitude": {
+      "type": "number",
+      "label": "Latitude",
+      "default": 37.7749
+    },
+    "longitude": {
+      "type": "number",
+      "label": "Longitude",
+      "default": -122.4194
+    },
+    "units": {
+      "type": "enum",
+      "label": "Units",
+      "values": [
+        "fahrenheit",
+        "celsius"
+      ],
+      "default": "fahrenheit"
+    }
+  }
+}

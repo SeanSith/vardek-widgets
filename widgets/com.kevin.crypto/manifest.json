@@ -1,0 +1,48 @@
+{
+  "id": "com.kevin.crypto",
+  "name": "Crypto",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 120,
+  "permissions": {
+    "proxy": [
+      "https://api.coingecko.com/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "coins": {
+      "type": "string",
+      "label": "Coin ids (CoinGecko, comma-separated)",
+      "default": "bitcoin,ethereum,solana,cardano"
+    },
+    "currency": {
+      "type": "string",
+      "label": "Currency",
+      "default": "usd"
+    }
+  }
+}

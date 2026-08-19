@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Marine Buoy</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#081018;--surface:#12202e;--border:#1e3548;--text:#e6f0f5;--mid:#7fa0b3;--dim:#4d6b7d;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--sea:#4cc9f0;--warn:#e0af68;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:24px 30px}
+  .head{display:flex;align-items:flex-end;gap:14px;margin-bottom:14px}
+  .head h1{font-size:1.4rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .st{font-family:var(--mono);font-size:.8rem;color:var(--dim)}
+  .head .sp{flex:1}.head .obs{font-family:var(--mono);font-size:.8rem;color:var(--dim)}
+  .hero{display:flex;gap:34px;align-items:center;margin-bottom:20px}
+  .wave{display:flex;flex-direction:column}
+  .wave .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:4.6rem;line-height:1;color:var(--sea)}
+  .wave .l{color:var(--mid);font-size:1rem;margin-top:2px}
+  .wind{display:flex;align-items:center;gap:16px}
+  .arrow{width:74px;height:74px;position:relative;flex-shrink:0}
+  .arrow svg{width:100%;height:100%}
+  .wind .wv{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:2rem;font-weight:700}
+  .wind .wl{color:var(--mid);font-size:.9rem}
+  .grid{flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;align-content:center}
+  .cell{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+  .cell .k{font-size:.78rem;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
+  .cell .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1.7rem;font-weight:700;margin-top:3px}
+  .cell .u{font-size:.8rem;color:var(--mid)}
+  #status{position:fixed;left:30px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">🌊</span><span id="name">Buoy</span></h1><span class="st" id="st"></span><span class="sp"></span><span class="obs" id="obs"></span></div>
+    <div class="hero">
+      <div class="wave"><div class="v" id="wvht">—</div><div class="l">significant wave height · <span id="dpd"></span></div></div>
+      <div class="wind"><div class="arrow" id="arrow"></div><div><div class="wv" id="wspd">—</div><div class="wl" id="wdir"></div></div></div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={station:"46026",stationName:"San Francisco",units:"imperial"};
+  var $=function(i){return document.getElementById(i)}, last=0, obs=null;
+  var COL={WDIR:5,WSPD:6,GST:7,WVHT:8,DPD:9,APD:10,MWD:11,PRES:12,ATMP:13,WTMP:14,DEWP:15};
+  function num(v){return (v==null||v==="MM"||v==="")?null:parseFloat(v)}
+  function imp(){return settings.units!=="metric"}
+  function ft(m){return m*3.28084} function kt(ms){return ms*1.94384} function f(c){return c*9/5+32}
+  function dirName(d){var dirs=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];return dirs[Math.round(d/22.5)%16]}
+  function arrow(deg){
+    // wind FROM deg -> arrow points TO (deg+180)
+    var to=(deg+180)%360;
+    $("arrow").innerHTML='<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="none" stroke="#1e3548" stroke-width="2"/>'
+      +'<g transform="rotate('+to+' 50 50)"><path d="M50 16 L62 60 L50 50 L38 60 Z" fill="#4cc9f0"/></g></svg>';
+  }
+  function render(){
+    $("name").textContent=settings.stationName||("Station "+settings.station);
+    $("st").textContent="NDBC "+settings.station;
+    var wv=obs.WVHT, dp=obs.DPD, ws=obs.WSPD, wd=obs.WDIR, wt=obs.WTMP, at=obs.ATMP, pr=obs.PRES, gs=obs.GST;
+    $("wvht").textContent=wv==null?"—":(imp()?ft(wv).toFixed(1):wv.toFixed(1))+(imp()?" ft":" m");
+    $("dpd").textContent=dp==null?"—":dp.toFixed(0)+"s period";
+    $("wspd").textContent=ws==null?"—":(imp()?kt(ws).toFixed(0)+" kt":ws.toFixed(0)+" m/s");
+    if(wd!=null){$("wdir").textContent="from "+dirName(wd)+" ("+wd.toFixed(0)+"°)";arrow(wd)}else{$("wdir").textContent="";$("arrow").innerHTML=""}
+    var cells=[
+      ["Water temp",wt==null?"—":(imp()?f(wt).toFixed(0):wt.toFixed(1)),imp()?"°F":"°C"],
+      ["Air temp",at==null?"—":(imp()?f(at).toFixed(0):at.toFixed(1)),imp()?"°F":"°C"],
+      ["Gust",gs==null?"—":(imp()?kt(gs).toFixed(0):gs.toFixed(0)),imp()?"kt":"m/s"],
+      ["Pressure",pr==null?"—":pr.toFixed(0),"hPa"]];
+    $("grid").innerHTML=cells.map(function(c){return '<div class="cell"><div class="k">'+c[0]+'</div><div class="v">'+c[1]+' <span class="u">'+c[2]+'</span></div></div>'}).join("");
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var res=await xemd.proxy.fetch("https://www.ndbc.noaa.gov/data/realtime2/"+encodeURIComponent(settings.station)+".txt",{headers:{Accept:"text/plain"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var txt=await res.text();
+      var lines=txt.split("\n").filter(function(l){return l.trim()&&l.charAt(0)!=="#"});
+      if(!lines.length)throw new Error("no data");
+      var rows=lines.slice(0,16).map(function(l){return l.trim().split(/\s+/)});
+      var f0=rows[0];
+      // coalesce each field to the most recent non-missing value (buoy sensors report on different cycles)
+      obs={};for(var k in COL){obs[k]=null;for(var r=0;r<rows.length;r++){var v=num(rows[r][COL[k]]);if(v!=null){obs[k]=v;break}}}
+      var yr=f0[0],mo=f0[1],dy=f0[2],hh=f0[3],mn=f0[4];
+      $("obs").textContent="obs "+new Date(Date.UTC(+yr,+mo-1,+dy,+hh,+mn)).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+      render();
+      $("status").className="";$("status").textContent="NOAA NDBC · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="ndbc: "+(e.message||e);if(!obs)$("boot").textContent="buoy data unavailable — check station ID"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,900000);
+  })();
+</script></body></html>

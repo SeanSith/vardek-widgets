@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Marine Forecast</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#04121a;--surface:#0e2432;--border:#1a3d52;--text:#e6f4fa;--mid:#79a6bd;--dim:#456778;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--sea:#38bdf8;--swell:#22d3aa;--err:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{position:absolute;inset:0;display:flex;padding:24px 30px;gap:30px}
+  .now{flex:0 0 44%;min-width:0;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--border);padding-right:28px}
+  .now .place{font-size:1.05rem;color:var(--mid);font-weight:600}
+  .now .row{display:flex;align-items:center;gap:20px;margin-top:6px}
+  .now .wh{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:4.6rem;line-height:.95;color:var(--sea)}
+  .now .whl{color:var(--mid);font-size:1rem;margin-top:2px}
+  .arrow{width:80px;height:80px;flex-shrink:0}
+  .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}
+  .chip{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 12px}
+  .chip .k{font-size:.72rem;color:var(--dim);text-transform:uppercase}
+  .chip .v{font-family:var(--mono);font-size:1.15rem;font-weight:700;margin-top:1px}
+  .fc{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+  .fc .h{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+  .day{display:grid;grid-template-columns:3em 1fr 4.5em;gap:14px;align-items:center;padding:8px 0}
+  .day+.day{border-top:1px solid rgba(26,61,82,.6)}
+  .day .dn{font-weight:600;color:var(--mid)}
+  .day .track{height:12px;background:var(--surface);border-radius:6px;overflow:hidden}
+  .day .track>div{height:100%;background:linear-gradient(90deg,var(--swell),var(--sea));border-radius:6px}
+  .day .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;text-align:right}
+  #status{position:fixed;left:30px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--err)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="now"><div class="place" id="place"></div>
+      <div class="row"><div><div class="wh" id="wh">—</div><div class="whl">significant wave height</div></div><svg class="arrow" id="arrow" viewBox="0 0 100 100"></svg></div>
+      <div class="chips" id="chips"></div></div>
+    <div class="fc"><div class="h">Wave height · next days</div><div id="days"></div></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={latitude:37.7749,longitude:-122.5,place:"",units:"imperial"};
+  var $=function(i){return document.getElementById(i)}, last=0, data=null;
+  function u(){return settings.units==="metric"?"m":"ft"}
+  function dirName(d){var dirs=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];return dirs[Math.round(d/22.5)%16]}
+  function arrow(deg){var to=(deg+180)%360;
+    $("arrow").innerHTML='<circle cx="50" cy="50" r="46" fill="none" stroke="#1a3d52" stroke-width="2"/><g transform="rotate('+to+' 50 50)"><path d="M50 14 L63 62 L50 52 L37 62 Z" fill="#38bdf8"/></g>';}
+  function render(){
+    var c=data.current;
+    $("place").textContent=settings.place||(Number(settings.latitude).toFixed(2)+", "+Number(settings.longitude).toFixed(2));
+    $("wh").textContent=c.wave_height==null?"—":c.wave_height.toFixed(1)+" "+u();
+    if(c.wave_direction!=null)arrow(c.wave_direction);
+    var chips=[
+      ["Period",c.wave_period!=null?c.wave_period.toFixed(0)+"s":"—"],
+      ["From",c.wave_direction!=null?dirName(c.wave_direction)+" "+Math.round(c.wave_direction)+"°":"—"],
+      ["Swell",c.swell_wave_height!=null?c.swell_wave_height.toFixed(1)+" "+u():"—"],
+      ["Swell per.",c.swell_wave_period!=null?c.swell_wave_period.toFixed(0)+"s":"—"]];
+    $("chips").innerHTML=chips.map(function(x){return '<div class="chip"><div class="k">'+x[0]+'</div><div class="v">'+x[1]+'</div></div>'}).join("");
+    var dl=data.daily,n=dl.time.length,mx=Math.max.apply(null,dl.wave_height_max.filter(function(v){return v!=null}))||1;
+    var html="";
+    for(var i=0;i<Math.min(n,6);i++){var wh=dl.wave_height_max[i],per=dl.wave_period_max?dl.wave_period_max[i]:null;
+      var dn=i===0?"Today":new Date(dl.time[i]+"T00:00").toLocaleDateString([],{weekday:"short"});
+      html+='<div class="day"><div class="dn">'+dn+'</div><div class="track"><div style="width:'+(wh/mx*100)+'%"></div></div>'
+        +'<div class="v">'+(wh==null?"—":wh.toFixed(1))+'<span style="font-size:.7rem;color:var(--dim)"> '+u()+'</span></div></div>';}
+    $("days").innerHTML=html;
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var lu=settings.units==="metric"?"metric":"imperial";
+      var url="https://marine-api.open-meteo.com/v1/marine?latitude="+Number(settings.latitude)+"&longitude="+Number(settings.longitude)
+        +"&current=wave_height,wave_period,wave_direction,swell_wave_height,swell_wave_period&daily=wave_height_max,wave_period_max&forecast_days=6&length_unit="+lu+"&timezone=auto";
+      var res=await xemd.proxy.fetch(url,{headers:{Accept:"application/json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      data=await res.json();if(!data.current)throw new Error("no marine data here");
+      render();
+      $("status").className="";$("status").textContent="Open-Meteo Marine · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="marine: "+(e.message||e);if(!data)$("boot").textContent="marine forecast unavailable (inland?)"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,3600000);
+  })();
+</script></body></html>

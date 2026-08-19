@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Boids</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#0a0d14}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={count:130,palette:"starling"};
+  var PAL={starling:["#c8d2e8","#8ea0c4","#5f7099"],tropical:["#4cc9f0","#f72585","#7cf29a"],mono:["#e6e9ef","#aab2c8","#7d879e"],ember:["#ffd166","#ff7b54","#f75c5c"]};
+  var cv=document.getElementById("c"),ctx=cv.getContext("2d"),W,H,dpr,boids=[];
+  function rnd(a,b){return a+Math.random()*(b-a)}
+  function build(){
+    var n=Math.max(20,Math.min(400,Math.round(Number(settings.count)||130))),pal=PAL[settings.palette]||PAL.starling;
+    boids=[];for(var i=0;i<n;i++)boids.push({x:Math.random()*W,y:Math.random()*H,vx:rnd(-1,1),vy:rnd(-1,1),c:pal[Math.floor(Math.random()*pal.length)]});
+  }
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);W=Math.round(cv.clientWidth*dpr);H=Math.round(cv.clientHeight*dpr);cv.width=W;cv.height=H;ctx.fillStyle="#0a0d14";ctx.fillRect(0,0,W,H);build()}
+  function step(){
+    var per=55*dpr, per2=per*per, sep=22*dpr, sep2=sep*sep, maxV=2.6*dpr, minV=1.4*dpr;
+    for(var i=0;i<boids.length;i++){
+      var b=boids[i],ax=0,ay=0,cx=0,cy=0,sx=0,sy=0,n=0;
+      for(var j=0;j<boids.length;j++){if(i===j)continue;var o=boids[j];var dx=o.x-b.x,dy=o.y-b.y,d2=dx*dx+dy*dy;
+        if(d2<per2){n++;ax+=o.vx;ay+=o.vy;cx+=o.x;cy+=o.y;if(d2<sep2&&d2>0){sx-=dx/d2*180*dpr;sy-=dy/d2*180*dpr;}}}
+      if(n){ax/=n;ay/=n;cx=cx/n-b.x;cy=cy/n-b.y;
+        b.vx+=(ax-b.vx)*0.05+cx*0.0009+sx*0.02;b.vy+=(ay-b.vy)*0.05+cy*0.0009+sy*0.02;}
+      // gentle center pull
+      b.vx+=(W/2-b.x)*0.00012;b.vy+=(H/2-b.y)*0.00012;
+      var sp=Math.hypot(b.vx,b.vy);if(sp>maxV){b.vx=b.vx/sp*maxV;b.vy=b.vy/sp*maxV}if(sp<minV&&sp>0){b.vx=b.vx/sp*minV;b.vy=b.vy/sp*minV}
+      b.x+=b.vx;b.y+=b.vy;
+      if(b.x<0)b.x+=W;if(b.x>W)b.x-=W;if(b.y<0)b.y+=H;if(b.y>H)b.y-=H;
+    }
+  }
+  function frame(){
+    ctx.fillStyle="rgba(10,13,20,0.22)";ctx.fillRect(0,0,W,H);
+    step();
+    for(var i=0;i<boids.length;i++){var b=boids[i],a=Math.atan2(b.vy,b.vx),s=4.2*dpr;
+      ctx.save();ctx.translate(b.x,b.y);ctx.rotate(a);
+      ctx.fillStyle=b.c;ctx.beginPath();ctx.moveTo(s*1.8,0);ctx.lineTo(-s,s*0.7);ctx.lineTo(-s*0.4,0);ctx.lineTo(-s,-s*0.7);ctx.closePath();ctx.fill();
+      ctx.restore();
+    }
+    requestAnimationFrame(frame);
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);build()});
+    xemd.ready();resize();requestAnimationFrame(frame);window.addEventListener("resize",resize);
+  })();
+</script></body></html>

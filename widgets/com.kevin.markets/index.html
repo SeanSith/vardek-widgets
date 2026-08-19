@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Markets</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--mid:#8089a6;--dim:#565f89;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;--up:#9ece6a;--down:#f7768e}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;flex-direction:column;height:100vh;padding:20px 28px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+  .head h1{font-size:1.25rem;font-weight:700}.head h1 .ic{margin-right:8px}
+  .head .sub{color:var(--mid);font-size:.95rem}.head .sp{flex:1}
+  .head .base{font-family:var(--mono);font-size:1rem;color:var(--dim)}.head .base b{color:var(--text)}
+  #list{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:4px}
+  .row{display:grid;grid-template-columns:2.4em 1fr 170px 6.5em 5.5em;align-items:center;gap:16px;padding:9px 6px}
+  .row+.row{border-top:1px solid rgba(42,51,80,.5)}
+  .row .flag{font-size:1.7rem;text-align:center}
+  .row .nm .c{font-size:1.15rem;font-weight:700}.row .nm .n{font-size:.82rem;color:var(--mid);margin-top:-1px}
+  .row canvas{width:170px;height:40px;display:block}
+  .row .rate{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1.35rem;font-weight:700;text-align:right}
+  .row .chg{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1rem;font-weight:700;text-align:right}
+  .row .chg.up{color:var(--up)}.row .chg.down{color:var(--down)}
+  #status{position:fixed;left:28px;bottom:7px;font-family:var(--mono);font-size:.72rem;color:var(--dim)}#status.err{color:var(--down)}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}#boot.hidden{display:none}
+</style></head>
+<body>
+  <div id="boot">connecting…</div>
+  <div id="wrap" style="display:none">
+    <div class="head"><h1><span class="ic">💱</span>Markets</h1><span class="sub" id="sub"></span><span class="sp"></span><span class="base" id="basehdr"></span></div>
+    <div id="list"></div>
+  </div>
+  <div id="status"></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={base:"USD",symbols:"EUR,GBP,JPY,CAD,CHF,AUD,CNY"};
+  var $=function(i){return document.getElementById(i)}, last=0;
+  var NAMES={USD:"US Dollar",EUR:"Euro",GBP:"British Pound",JPY:"Japanese Yen",CAD:"Canadian Dollar",CHF:"Swiss Franc",
+    AUD:"Australian Dollar",CNY:"Chinese Yuan",NZD:"NZ Dollar",SEK:"Swedish Krona",NOK:"Norwegian Krone",MXN:"Mexican Peso",
+    INR:"Indian Rupee",BRL:"Brazilian Real",ZAR:"South African Rand",SGD:"Singapore Dollar",HKD:"Hong Kong Dollar",
+    KRW:"South Korean Won",TRY:"Turkish Lira",PLN:"Polish Zloty",DKK:"Danish Krone",CZK:"Czech Koruna",ISK:"Icelandic Krona",
+    HUF:"Hungarian Forint",RON:"Romanian Leu",BGN:"Bulgarian Lev",ILS:"Israeli Shekel",PHP:"Philippine Peso",
+    THB:"Thai Baht",IDR:"Indonesian Rupiah",MYR:"Malaysian Ringgit"};
+  var FLAG={USD:"🇺🇸",EUR:"🇪🇺",GBP:"🇬🇧",JPY:"🇯🇵",CAD:"🇨🇦",CHF:"🇨🇭",AUD:"🇦🇺",CNY:"🇨🇳",NZD:"🇳🇿",SEK:"🇸🇪",NOK:"🇳🇴",
+    MXN:"🇲🇽",INR:"🇮🇳",BRL:"🇧🇷",ZAR:"🇿🇦",SGD:"🇸🇬",HKD:"🇭🇰",KRW:"🇰🇷",TRY:"🇹🇷",PLN:"🇵🇱",DKK:"🇩🇰",CZK:"🇨🇿",ISK:"🇮🇸",
+    HUF:"🇭🇺",RON:"🇷🇴",BGN:"🇧🇬",ILS:"🇮🇱",PHP:"🇵🇭",THB:"🇹🇭",IDR:"🇮🇩",MYR:"🇲🇾"};
+  function ymd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+  function fmt(v){return v>=100?v.toFixed(2):v>=1?v.toFixed(4):v.toFixed(5)}
+  function spark(cv,series,up){
+    var ctx=cv.getContext("2d"),dpr=Math.min(window.devicePixelRatio||1,2);
+    cv.width=170*dpr;cv.height=40*dpr;var W=cv.width,H=cv.height,pad=4*dpr;
+    ctx.clearRect(0,0,W,H);if(series.length<2)return;
+    var mn=Math.min.apply(null,series),mx=Math.max.apply(null,series),rng=(mx-mn)||1;
+    var col=up?"#9ece6a":"#f7768e";
+    var xy=function(i){return[pad+i/(series.length-1)*(W-2*pad), H-pad-(series[i]-mn)/rng*(H-2*pad)]};
+    // area
+    ctx.beginPath();ctx.moveTo(pad,H-pad);series.forEach(function(_,i){var p=xy(i);ctx.lineTo(p[0],p[1])});
+    ctx.lineTo(W-pad,H-pad);ctx.closePath();ctx.fillStyle=col+"1f";ctx.fill();
+    ctx.beginPath();series.forEach(function(_,i){var p=xy(i);i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])});
+    ctx.strokeStyle=col;ctx.lineWidth=1.8*dpr;ctx.lineJoin="round";ctx.stroke();
+    var lastp=xy(series.length-1);ctx.beginPath();ctx.arc(lastp[0],lastp[1],2.4*dpr,0,7);ctx.fillStyle=col;ctx.fill();
+  }
+  function render(latest,series){
+    $("basehdr").innerHTML='1 <b>'+esc(settings.base)+'</b> =';
+    $("sub").textContent=latest.date;
+    var syms=settings.symbols.split(",").map(function(s){return s.trim().toUpperCase()}).filter(Boolean);
+    var list=$("list");list.innerHTML="";
+    syms.forEach(function(cur){
+      if(latest.rates[cur]==null)return;
+      var s=(series[cur]||[]);
+      var first=s.length?s[0]:latest.rates[cur], lastv=latest.rates[cur];
+      var chg=first?((lastv-first)/first*100):0, up=chg>=0;
+      var row=document.createElement("div");row.className="row";
+      row.innerHTML='<div class="flag">'+(FLAG[cur]||"🏳️")+'</div>'
+        +'<div class="nm"><div class="c">'+esc(cur)+'</div><div class="n">'+esc(NAMES[cur]||cur)+'</div></div>'
+        +'<canvas></canvas>'
+        +'<div class="rate">'+fmt(lastv)+'</div>'
+        +'<div class="chg '+(up?"up":"down")+'">'+(up?"▲":"▼")+" "+Math.abs(chg).toFixed(2)+'%</div>';
+      list.appendChild(row);
+      spark(row.querySelector("canvas"),s.length?s:[lastv,lastv],up);
+    });
+    $("boot").classList.add("hidden");$("wrap").style.display="flex";
+  }
+  function esc(s){return String(s).replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
+  async function load(){
+    if(Date.now()-last<30000)return; last=Date.now();
+    try{
+      var base=(settings.base||"USD").trim().toUpperCase();
+      var syms=settings.symbols.split(",").map(function(s){return s.trim().toUpperCase()}).filter(Boolean).join(",");
+      var lres=await xemd.proxy.fetch("https://api.frankfurter.dev/v1/latest?base="+base+"&symbols="+syms,{headers:{Accept:"application/json"}});
+      if(!lres.ok)throw new Error("HTTP "+lres.status);
+      var latest=await lres.json();
+      var end=new Date(),start=new Date(end.getTime()-32*86400000);
+      var tres=await xemd.proxy.fetch("https://api.frankfurter.dev/v1/"+ymd(start)+".."+ymd(end)+"?base="+base+"&symbols="+syms,{headers:{Accept:"application/json"}});
+      var series={};
+      if(tres.ok){var td=await tres.json();var dates=Object.keys(td.rates||{}).sort();
+        dates.forEach(function(dt){var day=td.rates[dt];for(var k in day){(series[k]=series[k]||[]).push(day[k])}});}
+      render(latest,series);
+      $("status").className="";$("status").textContent="Frankfurter (ECB) · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){$("status").className="err";$("status").textContent="fx api: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="markets unavailable"}
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,1800000);
+  })();
+</script></body></html>

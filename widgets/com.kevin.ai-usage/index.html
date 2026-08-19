@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Usage</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* Cockpit tokens (DESIGN.md): Tokyo Night surfaces, Panel Indigo accent,
+       SF Mono for every live value. Base matches the runtime cell (#11151f)
+       so the widget meets its rounded cell without a seam. Provider hues are
+       identity only — quota bars stay indigo/violet at rest and go Panel
+       Amber / Red only when a limit is genuinely close. */
+    :root {
+      --bg: #11151f;
+      --surface: #161b28;
+      --surface-2: #1b2130;
+      --border: #2a3350;
+      --text: #e6e9ef;
+      --text-mid: #8089a6;
+      --text-dim: #565f89;
+      --accent: #7aa2f7;
+      --accent-2: #bb9af7;
+      --green: #9ece6a;
+      --yellow: #e0af68;
+      --red: #f7768e;
+      --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+      --hue-claude: #ff9e64;
+      --hue-codex: #7dcfff;
+      --hue-grok: #c0caf5;
+      --hue-muse: #7aa2f7;
+    }
+
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+    /* ── Overlay (no data yet / collector never ran) ─────────────── */
+    #overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+               background: var(--bg); z-index: 10; }
+    #overlay.hidden { display: none; }
+    .overlay-card { text-align: center; padding: 40px 52px; border-radius: 14px;
+                    border: 1px solid var(--border); background: var(--surface); max-width: 720px; }
+    .overlay-icon { color: var(--accent); margin-bottom: 18px; }
+    .overlay-icon svg { width: 44px; height: 44px; }
+    .overlay-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 10px; }
+    .overlay-body { font-size: 1rem; color: var(--text-mid); line-height: 1.6; }
+    .overlay-body code { font-family: var(--mono); color: var(--text); font-size: .9rem; }
+    .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent);
+               border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 18px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Layout: one instrument panel per provider ───────────────── */
+    #app { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;
+           padding: 20px; height: 100vh; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+             padding: 20px 24px 18px; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+             overflow: hidden; position: relative; }
+    .panel.idle .name { color: var(--text-mid); }
+    .panel.idle .dot { box-shadow: none; opacity: .45; }
+
+    /* header: identity dot · name · plan — model chip on the right */
+    .head { display: flex; align-items: center; gap: 12px; min-height: 36px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+           background: var(--hue); box-shadow: 0 0 10px 1px var(--glow); }
+    .name { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; color: var(--hue); line-height: 1; }
+    .plan { font-size: 1rem; color: var(--text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .plan::before { content: '·'; margin-right: 8px; color: var(--text-dim); }
+    .plan:empty { display: none; }
+    .model { margin-left: auto; font-family: var(--mono); font-size: .875rem; color: var(--text-dim);
+             border: 1px solid var(--border); border-radius: 8px; padding: 4px 9px; white-space: nowrap;
+             overflow: hidden; text-overflow: ellipsis; max-width: 45%; flex-shrink: 1; }
+    .model:empty { display: none; }
+
+    /* quota windows */
+    .quotas { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; min-height: 186px; }
+    .q { display: flex; flex-direction: column; gap: 6px; }
+    .q-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+    .q-label { font-size: .875rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text-mid); }
+    .q-reset { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: .875rem; color: var(--text-dim);
+               white-space: nowrap; }
+    .q-row { display: flex; align-items: center; gap: 14px; }
+    .bar { flex: 1; height: 8px; border-radius: 4px; background: rgba(122,162,247,.12); overflow: hidden; }
+    .bar > div { height: 100%; width: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2));
+                 transform: scaleX(0); transform-origin: left; transition: transform .5s ease; border-radius: 4px; }
+    .bar > div.warn { background: var(--yellow); }
+    .bar > div.crit { background: var(--red); }
+    .q-pct { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 1.5rem; line-height: 1;
+             min-width: 4.2ch; text-align: right; }
+    .q-pct span { font-size: .95rem; color: var(--text-dim); margin-left: 1px; }
+    .q-pct.warn { color: var(--yellow); }
+    .q-pct.crit { color: var(--red); }
+    .q-none { font-size: .95rem; color: var(--text-dim); padding: 10px 0 2px; display: flex; align-items: center; gap: 8px; }
+    .q-none .pill { font-family: var(--mono); font-size: .8rem; border: 1px dashed var(--border); border-radius: 6px;
+                    padding: 3px 7px; }
+
+    /* today: bottom-anchored value block (number, context, chart) */
+    .today { margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+    .t-label { font-size: .875rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--accent);
+               display: flex; justify-content: space-between; align-items: baseline; }
+    .t-label .cost { font-family: var(--mono); font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0;
+                     font-size: 1.25rem; color: var(--text); font-weight: 500; }
+    .t-label .cost small { font-size: .8rem; color: var(--text-dim); margin-left: 5px; font-weight: 600; letter-spacing: .06em; }
+    .t-label .cost:empty { display: none; }
+    .big { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 3rem; line-height: 1; font-weight: 500;
+           display: flex; align-items: baseline; gap: 10px; }
+    .big .unit { font-size: 1.1rem; color: var(--text-dim); font-weight: 400; }
+    .split { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: .95rem; color: var(--text-mid);
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .split .up { color: var(--accent-2); } .split .down { color: var(--accent); }
+    .split .sep { color: var(--text-dim); margin: 0 6px; }
+
+    /* 14-day chart */
+    .chart { margin-top: 14px; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+    .c-wrap { flex: 1; min-height: 56px; }
+    .c-label { display: flex; justify-content: space-between; align-items: baseline; font-size: .8rem; font-weight: 600;
+               letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); }
+    .c-label .wk { font-family: var(--mono); font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0;
+                   font-size: .875rem; color: var(--text-mid); font-weight: 500; }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    .foot { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex;
+            justify-content: space-between; gap: 10px; font-size: .875rem; color: var(--text-dim);
+            font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+    /* stale: dim the live values so a frozen reading can't pass for live */
+    #badge { position: fixed; right: 30px; top: 30px; z-index: 5; font-family: var(--mono); font-size: .8rem;
+             color: var(--yellow); border: 1px solid var(--yellow); border-radius: 6px; padding: 3px 8px;
+             background: rgba(224,175,104,.08); display: none; }
+    body.stale #badge { display: block; }
+    body.stale .big, body.stale .q-pct, body.stale .split, body.stale .cost { color: var(--text-dim) !important; }
+    body.stale .bar > div { background: var(--text-dim) !important; }
+
+    /* ── Compact (4×2 cell: four panels in a 2×2 grid) ────────────── */
+    @media (max-width: 1500px) {
+      #app { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 14px; }
+      .panel { padding: 14px 18px 12px; }
+      .name { font-size: 1.25rem; }
+      .plan { font-size: .9rem; }
+      .model { font-size: .8rem; padding: 3px 7px; }
+      .quotas { margin-top: 10px; gap: 6px; min-height: 102px; }
+      .q { flex-direction: row; align-items: center; gap: 12px; }
+      .q-top { flex: 0 0 auto; width: 128px; }
+      .q-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .8rem; }
+      .q-reset { display: none; }
+      .q-row { flex: 1; }
+      .q-pct { font-size: 1.2rem; }
+      .today { margin-top: 6px; padding-top: 8px; gap: 3px; }
+      .big { font-size: 2.1rem; }
+      .split { font-size: .85rem; }
+      .foot { display: none; }
+      .chart { margin-top: 8px; gap: 3px; }
+      .c-wrap { min-height: 36px; }
+      .c-label { font-size: .7rem; }
+      .c-label .wk { font-size: .8rem; }
+      #badge { right: 22px; top: 22px; }
+    }
+    /* honour the "hide chart" setting at any size */
+    body.no-chart .chart { display: none; }
+    body.no-cost .cost { display: none; }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <div class="overlay-card">
+      <div class="spinner" id="spinner"></div>
+      <div class="overlay-icon" id="ov-icon" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 15v-4"/><path d="M12 15V8"/><path d="M16 15v-2"/>
+        </svg>
+      </div>
+      <div class="overlay-title" id="ov-title">Loading usage…</div>
+      <div class="overlay-body" id="ov-body">Reading Claude, Codex, Grok and Muse activity.</div>
+    </div>
+  </div>
+  <div id="badge">stale</div>
+  <div id="app"></div>
+
+  <template id="panel-tpl">
+    <section class="panel">
+      <div class="head">
+        <span class="dot"></span>
+        <span class="name"></span>
+        <span class="plan"></span>
+        <span class="model"></span>
+      </div>
+      <div class="quotas"></div>
+      <div class="today">
+        <div class="t-label"><span class="t-title">Today</span><span class="cost"></span></div>
+        <div class="big"><span class="num">—</span><span class="unit">tokens</span></div>
+        <div class="split"></div>
+      </div>
+      <div class="chart">
+        <div class="c-label"><span>14 days</span><span class="wk"></span></div>
+        <div class="c-wrap"><canvas></canvas></div>
+      </div>
+      <div class="foot"><span class="last"></span><span class="sess"></span></div>
+    </section>
+  </template>
+
+  <script type="module">
+    import { xemd } from '/sdk/widget-sdk.js';
+
+    const ORDER = ['claude', 'codex', 'grok', 'muse'];
+    const HUE = { claude: 'var(--hue-claude)', codex: 'var(--hue-codex)', grok: 'var(--hue-grok)', muse: 'var(--hue-muse)' };
+    const HUE_RGB = { claude: '#ff9e64', codex: '#7dcfff', grok: '#c0caf5', muse: '#7aa2f7' };
+    const GLOW = { claude: 'rgba(255,158,100,.55)', codex: 'rgba(125,207,255,.55)', grok: 'rgba(192,202,245,.55)', muse: 'rgba(122,162,247,.55)' };
+
+    let data = null;
+    let settings = { showCost: true, showChart: true, staleMinutes: 20 };
+    const panels = {};
+    const $app = document.getElementById('app');
+
+    // ── formatting ───────────────────────────────────────────────────
+    const fmtTok = (n) => {
+      if (n == null) return '—';
+      if (n < 1000) return String(Math.round(n));
+      if (n < 1e6) return (n / 1e3).toFixed(n < 1e4 ? 1 : 0) + 'K';
+      if (n < 1e9) return (n / 1e6).toFixed(n < 1e7 ? 2 : 1) + 'M';
+      return (n / 1e9).toFixed(2) + 'B';
+    };
+    const fmtCost = (c) => {
+      if (c == null || !(c > 0)) return null;
+      if (c < 10) return '$' + c.toFixed(2);
+      if (c < 1000) return '$' + c.toFixed(1);
+      return '$' + Math.round(c).toLocaleString('en-US');
+    };
+    const fmtDur = (ms) => {
+      const s = Math.max(0, Math.round(ms / 1000));
+      const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+      if (d > 0) return d + 'd ' + h + 'h';
+      if (h > 0) return h + 'h ' + String(m).padStart(2, '0') + 'm';
+      return m + 'm';
+    };
+    const ago = (iso) => {
+      if (!iso) return 'no activity';
+      const ms = Date.now() - Date.parse(iso);
+      if (ms < 60e3) return 'active now';
+      if (ms < 3600e3) return Math.floor(ms / 60e3) + 'm ago';
+      if (ms < 86400e3) return Math.floor(ms / 3600e3) + 'h ago';
+      return Math.floor(ms / 86400e3) + 'd ago';
+    };
+    const levelClass = (pct) => pct == null ? '' : pct >= 90 ? 'crit' : pct >= 75 ? 'warn' : '';
+    const shortModel = (m) => (m || '').replace(/^claude-/, '').replace(/-\d{8}$/, '');
+
+    // ── build ────────────────────────────────────────────────────────
+    function build() {
+      const tpl = document.getElementById('panel-tpl');
+      $app.textContent = '';
+      for (const id of ORDER) {
+        const node = tpl.content.firstElementChild.cloneNode(true);
+        node.dataset.provider = id;
+        node.style.setProperty('--hue', HUE[id]);
+        node.style.setProperty('--glow', GLOW[id]);
+        $app.appendChild(node);
+        panels[id] = {
+          root: node,
+          name: node.querySelector('.name'), plan: node.querySelector('.plan'), model: node.querySelector('.model'),
+          quotas: node.querySelector('.quotas'), cost: node.querySelector('.cost'), num: node.querySelector('.num'),
+          split: node.querySelector('.split'), wk: node.querySelector('.wk'), canvas: node.querySelector('canvas'),
+          last: node.querySelector('.last'), sess: node.querySelector('.sess'),
+        };
+      }
+    }
+
+    function el(tag, cls, text) {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text != null) e.textContent = text;
+      return e;
+    }
+
+    function renderQuotas(p, prov) {
+      p.quotas.textContent = '';
+      const wins = (prov.windows || []).slice(0, 3);
+      if (!wins.length) {
+        const none = el('div', 'q-none');
+        none.appendChild(el('span', null, prov.quotaError ? 'quota unavailable' : 'no quota window'));
+        none.appendChild(el('span', 'pill', prov.quotaError ? String(prov.quotaError).slice(0, 40) : 'usage-based'));
+        p.quotas.appendChild(none);
+        return;
+      }
+      for (const w of wins) {
+        const q = el('div', 'q');
+        const top = el('div', 'q-top');
+        top.appendChild(el('span', 'q-label', String(w.label || 'Quota').replace(/^(claude|codex|grok|muse)\s+/i, '')));
+        const reset = el('span', 'q-reset');
+        reset.dataset.resetsAt = w.resetsAt || '';
+        top.appendChild(reset);
+        q.appendChild(top);
+        const row = el('div', 'q-row');
+        const bar = el('div', 'bar');
+        const fill = el('div', levelClass(w.usedPercent));
+        bar.appendChild(fill);
+        row.appendChild(bar);
+        const pct = el('span', 'q-pct ' + levelClass(w.usedPercent));
+        pct.textContent = w.usedPercent == null ? '—' : String(Math.round(w.usedPercent));
+        pct.appendChild(el('span', null, '%'));
+        row.appendChild(pct);
+        q.appendChild(row);
+        p.quotas.appendChild(q);
+        // next frame so the scaleX transition plays from 0 on first paint
+        requestAnimationFrame(() => { fill.style.transform = 'scaleX(' + Math.min(Math.max((w.usedPercent || 0) / 100, 0), 1) + ')'; });
+      }
+      tickResets();
+    }
+
+    function tickResets() {
+      const now = Date.now();
+      document.querySelectorAll('.q-reset').forEach((r) => {
+        const at = r.dataset.resetsAt ? Date.parse(r.dataset.resetsAt) : NaN;
+        if (isNaN(at)) { r.textContent = ''; return; }
+        const ms = at - now;
+        r.textContent = ms <= 0 ? 'resetting…' : 'resets in ' + fmtDur(ms);
+      });
+    }
+
+    function drawChart(canvas, days, hue) {
+      const dpr = window.devicePixelRatio || 1;
+      const cw = canvas.clientWidth, ch = canvas.clientHeight;
+      if (!cw || !ch) return;
+      const w = Math.round(cw * dpr), h = Math.round(ch * dpr);
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, w, h);
+      const n = days.length;
+      if (!n) return;
+      const peak = Math.max(1, ...days.map((d) => d.tokens || 0));
+      const gap = 6 * dpr;
+      const bw = (w - gap * (n - 1)) / n;
+      const base = h - 1.5 * dpr;
+      // baseline
+      ctx.fillStyle = 'rgba(42,51,80,.9)';
+      ctx.fillRect(0, base, w, 1.5 * dpr);
+      days.forEach((d, i) => {
+        const v = d.tokens || 0;
+        const bh = v > 0 ? Math.max(3 * dpr, (v / peak) * (base - 6 * dpr)) : 0;
+        const x = i * (bw + gap);
+        const isToday = i === n - 1;
+        if (v > 0) {
+          ctx.fillStyle = hue;
+          ctx.globalAlpha = isToday ? 1 : 0.55;
+          roundRect(ctx, x, base - bh, bw, bh, Math.min(3 * dpr, bw / 2));
+          ctx.fill();
+        } else {
+          ctx.fillStyle = 'rgba(86,95,137,.35)';
+          ctx.globalAlpha = 1;
+          ctx.fillRect(x, base - 2 * dpr, bw, 2 * dpr);
+        }
+      });
+      ctx.globalAlpha = 1;
+    }
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function renderProvider(id, prov) {
+      const p = panels[id];
+      const t = prov.today || {};
+      const hasToday = (t.tokens || 0) > 0;
+      p.root.classList.toggle('idle', !hasToday && !(prov.windows || []).length);
+      p.name.textContent = prov.name || id;
+      p.plan.textContent = prov.plan ? (prov.cli + ' · ' + prov.plan) : (prov.cli || '');
+      p.model.textContent = shortModel(prov.currentModel || (prov.models && prov.models[0] ? prov.models[0].model : ''));
+
+      renderQuotas(p, prov);
+
+      p.num.textContent = hasToday ? fmtTok(t.tokens) : '0';
+      const cost = fmtCost(t.cost);
+      p.cost.textContent = '';
+      if (cost && settings.showCost !== false) {
+        p.cost.appendChild(document.createTextNode(cost));
+        p.cost.appendChild(el('small', null, id === 'grok' ? 'billed' : 'est'));
+      }
+
+      p.split.textContent = '';
+      if (hasToday) {
+        const cached = (t.cacheRead || 0), inp = (t.input || 0) + cached + (t.cacheWrite || 0);
+        const pctCached = inp > 0 ? Math.round((cached / inp) * 100) : 0;
+        const up = el('span', 'up', '↑ ' + fmtTok(t.output || 0) + ' out');
+        const down = el('span', 'down', '↓ ' + fmtTok(inp) + ' in');
+        p.split.appendChild(up);
+        p.split.appendChild(el('span', 'sep', '·'));
+        p.split.appendChild(down);
+        if (pctCached > 0) p.split.appendChild(document.createTextNode(' (' + pctCached + '% cached)'));
+        p.split.appendChild(el('span', 'sep', '·'));
+        p.split.appendChild(document.createTextNode((t.calls || 0) + (t.calls === 1 ? ' call' : ' calls')));
+      } else {
+        p.split.appendChild(document.createTextNode(prov.lastActive ? 'quiet today' : 'no local activity found'));
+      }
+
+      const wk = prov.week || {};
+      const wkCost = settings.showCost !== false ? fmtCost(wk.cost) : null;
+      p.wk.textContent = (wk.tokens ? fmtTok(wk.tokens) + ' this week' : '—') + (wkCost ? ' · ' + wkCost : '');
+      p.last.textContent = ago(prov.lastActive);
+      p.sess.textContent = prov.sessionsToday ? prov.sessionsToday + (prov.sessionsToday === 1 ? ' session today' : ' sessions today') : '';
+      requestAnimationFrame(() => drawChart(p.canvas, prov.days || [], HUE_RGB[id]));
+    }
+
+    function render() {
+      if (!data || !data.providers) return;
+      document.getElementById('overlay').classList.add('hidden');
+      document.body.classList.toggle('no-chart', settings.showChart === false);
+      document.body.classList.toggle('no-cost', settings.showCost === false);
+      for (const id of ORDER) renderProvider(id, data.providers[id] || { name: id, cli: '' });
+      checkStale();
+    }
+
+    function checkStale() {
+      if (!data) return;
+      const ageMin = (Date.now() - Date.parse(data.generatedAt)) / 60e3;
+      const limit = Number(settings.staleMinutes) > 0 ? Number(settings.staleMinutes) : 20;
+      const stale = ageMin > limit;
+      document.body.classList.toggle('stale', stale);
+      if (stale) document.getElementById('badge').textContent = 'stale · collector last ran ' + fmtDur(ageMin * 60e3) + ' ago';
+    }
+
+    // ── data loading: JSONP-style so the sandboxed iframe needs no CORS ──
+    let loadTries = 0;
+    let lastLoad = 0;
+    function loadData() {
+      // The runtime can fire several refresh events back-to-back (visibility,
+      // settings, timer); one fetch per 5s is plenty for a file that changes
+      // every few minutes.
+      if (Date.now() - lastLoad < 5000) return Promise.resolve(false);
+      lastLoad = Date.now();
+      return new Promise((resolve) => {
+        const s = document.createElement('script');
+        s.src = 'data.js?v=' + Date.now();
+        s.onload = () => { s.remove(); if (window.__AI_USAGE__) { data = window.__AI_USAGE__; loadTries = 0; render(); } resolve(true); };
+        s.onerror = () => {
+          s.remove(); loadTries++;
+          if (!data) showWaiting();
+          resolve(false);
+        };
+        document.head.appendChild(s);
+      });
+    }
+
+    function showWaiting() {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('ov-icon').style.display = '';
+      document.getElementById('ov-title').textContent = 'Waiting for the usage collector';
+      const b = document.getElementById('ov-body');
+      b.textContent = '';
+      b.appendChild(document.createTextNode('No data.js yet. Run the collector once, or load its LaunchAgent so it runs every few minutes:'));
+      b.appendChild(document.createElement('br'));
+      b.appendChild(el('code', null, 'python3 "~/Library/Application Support/Vardek/widgets/com.kevin.ai-usage/collector/collect.py"'));
+    }
+
+    // ── boot ─────────────────────────────────────────────────────────
+    build();
+    // Settings come from the parent runtime; when opened standalone (or if the
+    // relay is slow) don't let a silent request block first paint.
+    const withTimeout = (p, ms) => Promise.race([p, new Promise((res) => setTimeout(() => res(null), ms))]);
+    try {
+      const s = await withTimeout(xemd.settings.get(), 1500);
+      if (s && typeof s === 'object') settings = Object.assign(settings, s);
+    } catch (e) { /* settings are optional */ }
+    xemd.onSettingsChange((s) => { if (s && typeof s === 'object') settings = Object.assign(settings, s); render(); });
+    xemd.onRefresh(loadData);
+    xemd.ready();
+    await loadData();
+    setInterval(loadData, 120e3);           // belt-and-braces if the runtime's refresh event is missed
+    setInterval(() => { tickResets(); checkStale(); if (data) for (const id of ORDER) panels[id].last.textContent = ago((data.providers[id] || {}).lastActive); }, 30e3);
+    window.addEventListener('resize', () => { if (data) for (const id of ORDER) drawChart(panels[id].canvas, (data.providers[id] || {}).days || [], HUE_RGB[id]); });
+  </script>
+</body>
+</html>

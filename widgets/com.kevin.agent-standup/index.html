@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Standup</title>
+<style>
+  /* Cockpit tokens (DESIGN.md): Tokyo Night surfaces, indigo/violet at rest,
+     Panel Amber only where something genuinely needs the human. */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #11151f; --surface: #161b28; --surface-2: #1b2130; --border: #2a3350;
+    --text: #e6e9ef; --text-mid: #8089a6; --text-dim: #565f89;
+    --accent: #7aa2f7; --accent-2: #bb9af7; --green: #9ece6a; --yellow: #e0af68; --red: #f7768e;
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  #wrap { display: flex; flex-direction: column; height: 100vh; padding: 20px 24px 16px; gap: 14px; }
+
+  /* header */
+  .head { display: flex; align-items: baseline; gap: 14px; }
+  .head h1 { font-size: .95rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); flex-shrink: 0; }
+  .headline { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.01em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .headline.calm { color: var(--green); } .headline.warn { color: var(--yellow); }
+  .head .sp { flex: 1; }
+  .pills { display: flex; gap: 6px; flex-shrink: 0; }
+  .pill { font-family: var(--mono); font-size: .8rem; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-mid); white-space: nowrap; }
+  .pill.wait { color: var(--yellow); border-color: rgba(224,175,104,.45); }
+  .pill.run { color: var(--green); border-color: rgba(158,206,106,.45); }
+
+  /* attention list — the point of the widget */
+  #att { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 10px; }
+  #att::-webkit-scrollbar { width: 6px; } #att::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .item { background: rgba(224,175,104,.05); border: 1px solid rgba(224,175,104,.42); border-radius: 12px;
+          padding: 12px 16px; display: flex; flex-direction: column; gap: 5px; cursor: default; }
+  .item .l1 { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .item .adot { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); flex-shrink: 0; align-self: center; }
+  .item .t { font-size: 1.2rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .tool { font-family: var(--mono); font-size: .75rem; color: var(--text-mid); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; flex-shrink: 0; }
+  .item .sp { flex: 1; }
+  .item .chev { color: var(--text-dim); font-size: 1rem; flex-shrink: 0; transition: transform .15s; }
+  .item.open .chev { transform: rotate(90deg); }
+  .item .reason { font-size: 1.05rem; color: var(--text); line-height: 1.35; }
+  .item .detail { display: none; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border);
+                  font-family: var(--mono); font-size: .85rem; color: var(--text-mid); white-space: pre-wrap; word-break: break-word; }
+  .item.open .detail { display: block; }
+  .item.tappable { cursor: pointer; }
+
+  .calm-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-dim); }
+  .calm-box .big { font-size: 2rem; color: var(--green); }
+  .calm-box .sub { font-size: 1rem; }
+
+  /* running / idle strip */
+  .strip { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; font-size: .95rem; color: var(--text-mid); }
+  .strip .grp { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .strip .lbl { font-family: var(--mono); font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); flex-shrink: 0; }
+  .strip .names { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .strip .run .dot, .strip .idle .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+  .strip .run .dot { background: var(--green); } .strip .idle .dot { background: var(--accent); }
+  body.no-strip .strip { display: none; }
+
+  .foot { display: flex; justify-content: space-between; gap: 10px; font-family: var(--mono); font-size: .8rem; color: var(--text-dim); }
+  .foot .err { color: var(--red); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body.stale .foot .upd { color: var(--yellow); }
+  body.no-cost .foot .cost { display: none; }
+
+  /* thinking shimmer on the headline while the model is (re)generating */
+  @keyframes breathe { 0%,100% { opacity: 1 } 50% { opacity: .55 } }
+  body.thinking .headline { animation: breathe 1.6s ease-in-out infinite; }
+
+  /* compact */
+  @media (max-width: 1100px) {
+    #wrap { padding: 14px 16px 12px; gap: 10px; }
+    .head { flex-wrap: wrap; gap: 6px 12px; } .headline { font-size: 1.3rem; }
+    .item .t { font-size: 1.05rem; } .item .reason { font-size: .95rem; }
+    .strip { font-size: .85rem; } .foot .cost { display: none; }
+  }
+
+  #boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 1.1rem; }
+  #boot.hidden { display: none; }
+</style>
+</head>
+<body>
+  <div id="boot">Waiting for the standup generator…</div>
+  <div id="wrap" style="display:none">
+    <div class="head">
+      <h1>Standup</h1>
+      <div class="headline" id="headline">—</div>
+      <div class="sp"></div>
+      <div class="pills" id="pills"></div>
+    </div>
+    <div id="att"></div>
+    <div class="strip" id="strip"></div>
+    <div class="foot"><span class="upd" id="upd">—</span><span class="err" id="err"></span><span class="cost" id="cost"></span></div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+  var settings = {}, data = null;
+  var $ = function (id) { return document.getElementById(id); };
+  var el = function (tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  function ago(iso) {
+    if (!iso) return "—";
+    var ms = Date.now() - Date.parse(iso);
+    if (ms < 10000) return "just now";
+    if (ms < 60000) return Math.floor(ms / 1000) + "s ago";
+    if (ms < 3600000) return Math.floor(ms / 60000) + "m ago";
+    return Math.floor(ms / 3600000) + "h ago";
+  }
+
+  var openKeys = {};   // remember which items are expanded across refreshes
+
+  function render() {
+    if (!data) return;
+    $("boot").classList.add("hidden");
+    $("wrap").style.display = "flex";
+    document.body.classList.toggle("no-strip", settings.showRunning === false);
+    document.body.classList.toggle("no-cost", settings.showCost === false);
+
+    var att = data.attention || [];
+    var h = $("headline");
+    h.textContent = data.headline || (att.length ? att.length + " agents need you" : "All clear");
+    h.className = "headline " + (att.length ? "warn" : "calm");
+
+    // pills
+    var pills = $("pills"); pills.textContent = "";
+    var c = data.counts || {};
+    if (c.waiting) pills.appendChild(el("span", "pill wait", c.waiting + " waiting"));
+    if (c.running) pills.appendChild(el("span", "pill run", c.running + " running"));
+    if (c.alive != null) pills.appendChild(el("span", "pill", (c.alive || 0) + " live"));
+    if (c.stopped) pills.appendChild(el("span", "pill", c.stopped + " stopped"));
+
+    // attention
+    var box = $("att"); box.textContent = "";
+    if (!att.length) {
+      var calm = el("div", "calm-box");
+      calm.appendChild(el("div", "big", "✓ nothing needs you"));
+      calm.appendChild(el("div", "sub", (c.running || 0) + " running · " + (c.idle || 0) + " idle"));
+      box.appendChild(calm);
+    } else {
+      att.forEach(function (a, i) {
+        var key = a.id || (a.title + i);
+        var item = el("div", "item" + (a.detail || a.snippet ? " tappable" : ""));
+        var l1 = el("div", "l1");
+        l1.appendChild(el("span", "adot"));
+        l1.appendChild(el("span", "t", a.title || "session"));
+        if (a.tool) l1.appendChild(el("span", "tool", a.tool));
+        l1.appendChild(el("span", "sp"));
+        l1.appendChild(el("span", "chev", "›"));
+        item.appendChild(l1);
+        item.appendChild(el("div", "reason", a.reason || ""));
+        var det = a.detail || (a.snippet ? a.snippet.join("\n") : "");
+        if (det) {
+          var d = el("div", "detail", det);
+          item.appendChild(d);
+          if (openKeys[key]) item.classList.add("open");
+          item.addEventListener("click", function () {
+            var nowOpen = !item.classList.contains("open");
+            item.classList.toggle("open", nowOpen);
+            openKeys[key] = nowOpen;
+          });
+        }
+        box.appendChild(item);
+      });
+    }
+
+    // running / idle strip
+    var strip = $("strip"); strip.textContent = "";
+    var running = data.running || [], idle = data.idle || [];
+    if (running.length) {
+      var g = el("div", "grp run");
+      g.appendChild(el("span", "lbl", "running"));
+      var n = el("span", "names"); n.appendChild(el("span", "dot")); n.appendChild(document.createTextNode(running.join(", ")));
+      g.appendChild(n); strip.appendChild(g);
+    }
+    if (idle.length) {
+      var g2 = el("div", "grp idle");
+      g2.appendChild(el("span", "lbl", "idle"));
+      var n2 = el("span", "names"); n2.appendChild(el("span", "dot")); n2.appendChild(document.createTextNode(idle.join(", ")));
+      g2.appendChild(n2); strip.appendChild(g2);
+    }
+    if (!running.length && !idle.length && att.length) strip.appendChild(el("span", null, ""));
+
+    // footer
+    $("upd").textContent = "brief " + ago(data.lastModelAt) + (data.model ? " · " + data.model.replace("claude-", "") : "");
+    $("err").textContent = data.degraded ? "model: " + data.degraded : "";
+    $("cost").textContent = (settings.showCost !== false && data.lastCost) ? "$" + Number(data.lastCost).toFixed(3) + "/brief" : "";
+    freshness();
+  }
+
+  function freshness() {
+    if (!data) return;
+    var ageMs = Date.now() - Date.parse(data.generatedAt);
+    document.body.classList.toggle("stale", ageMs > 60000);           // generator stopped writing
+    var brief = data.lastModelAt ? Date.now() - Date.parse(data.lastModelAt) : 1e12;
+    document.body.classList.toggle("thinking", data._justChanged && brief < 4000);
+    $("upd").textContent = "brief " + ago(data.lastModelAt) + (data.model ? " · " + data.model.replace("claude-", "") : "");
+  }
+
+  var lastModelAt = null;
+  function loadData() {
+    var s = document.createElement("script");
+    s.src = "data.js?v=" + Date.now();
+    s.onload = function () {
+      s.remove();
+      if (window.__STANDUP__) {
+        var d = window.__STANDUP__;
+        d._justChanged = d.lastModelAt && d.lastModelAt !== lastModelAt;
+        lastModelAt = d.lastModelAt;
+        data = d; render();
+      }
+    };
+    s.onerror = function () { s.remove(); if (!data) $("boot").textContent = "Standup generator not running — see README"; };
+    document.head.appendChild(s);
+  }
+
+  // boot
+  if (window.Vardek) settings = Vardek.settings || {};
+  document.addEventListener("vardek:ready", function () { settings = (window.Vardek && Vardek.settings) || settings; render(); });
+  if (window.Vardek && Vardek.onResize) Vardek.onResize(render);
+  window.addEventListener("resize", render);
+  loadData();
+  setInterval(loadData, 5000);
+  setInterval(freshness, 4000);
+})();
+</script>
+</body>
+</html>

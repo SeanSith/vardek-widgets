@@ -1,0 +1,43 @@
+{
+  "id": "com.kevin.tube",
+  "name": "London Underground",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "subscriptions": [],
+  "refreshInterval": 120,
+  "permissions": {
+    "proxy": [
+      "https://api.tfl.gov.uk/**"
+    ],
+    "secrets": []
+  },
+  "sizes": [
+    {
+      "cols": 8,
+      "rows": 2
+    },
+    {
+      "cols": 6,
+      "rows": 2
+    },
+    {
+      "cols": 4,
+      "rows": 2
+    },
+    {
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "cols": 8,
+      "rows": 1
+    }
+  ],
+  "settingsSchema": {
+    "modes": {
+      "type": "string",
+      "label": "Modes (comma)",
+      "default": "tube,dlr,overground,elizabeth-line"
+    }
+  }
+}

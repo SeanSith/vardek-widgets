@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>GitHub Trending</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0b0e15;--surface:#161b28;--border:#2a3350;--text:#e6e9ef;--text-mid:#8089a6;--text-dim:#565f89;--accent:#e3b341;--mono:ui-monospace,'SF Mono',Menlo,monospace}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+  #wrap{display:flex;flex-direction:column;height:100vh;padding:18px 22px 10px}
+  .head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .logo{font-size:1.4rem}.head h1{font-size:1.3rem;font-weight:700}.head .q{font-family:var(--mono);font-size:.78rem;color:var(--accent);border:1px solid rgba(227,179,65,.35);border-radius:6px;padding:2px 8px}
+  .head .sp{flex:1}.head .upd{font-family:var(--mono);font-size:.78rem;color:var(--text-dim)}
+  #list{flex:1;min-height:0;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:2px 26px;align-content:start}
+  #list::-webkit-scrollbar{width:6px}#list::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  .r{padding:9px 8px;border-radius:8px;cursor:pointer;border-bottom:1px solid rgba(42,51,80,.4)}.r:active{background:var(--surface)}
+  .r .n{font-size:1.05rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.r .n .o{color:var(--text-mid);font-weight:500}
+  .r .d{font-size:.9rem;color:var(--text-mid);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .r .m{display:flex;gap:14px;font-family:var(--mono);font-size:.82rem;color:var(--text-dim);margin-top:4px}
+  .r .m .st{color:var(--accent)}.r .m .lang .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#7aa2f7;margin-right:5px;vertical-align:middle}
+  @media(max-width:1200px){#list{grid-template-columns:1fr}}
+  #ov{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--bg);color:var(--text-dim);text-align:center;padding:30px}
+  body.loading #ov,body.error #ov{display:flex}body.error #ov{color:#f7768e;font-family:var(--mono);font-size:.9rem}
+  .sp2{width:34px;height:34px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:s .8s linear infinite}@keyframes s{to{transform:rotate(360deg)}}
+</style></head>
+<body class="loading">
+  <div id="wrap"><div class="head"><span class="logo">🐙</span><h1>GitHub Trending</h1><span class="q" id="q"></span><span class="sp"></span><span class="upd" id="upd">loading…</span></div><div id="list"></div></div>
+  <div id="ov"><div class="sp2" id="sp"></div><div id="msg" style="margin-left:14px"></div></div>
+<script type="module">
+  import { xemd } from '/sdk/widget-sdk.js';
+  var settings={sinceDays:7,language:"",count:12}, $=function(i){return document.getElementById(i)}, last=0, cache=null;
+  function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+  var LANG={JavaScript:"#f1e05a",TypeScript:"#3178c6",Python:"#3572A5",Rust:"#dea584",Go:"#00ADD8",C:"#555",Java:"#b07219",Ruby:"#701516",Swift:"#F05138","C++":"#f34b7d",Zig:"#ec915c",Shell:"#89e051",HTML:"#e34c26"};
+  function render(items){
+    var list=$("list");list.textContent="";
+    items.slice(0,Math.min(20,Number(settings.count)||12)).forEach(function(r){
+      var el0=el("div","r");
+      var parts=(r.full_name||"").split("/");
+      var n=el("div","n");n.appendChild(el("span","o",parts[0]+" / "));n.appendChild(document.createTextNode(parts[1]||""));el0.appendChild(n);
+      if(r.description)el0.appendChild(el("div","d",r.description));
+      var m=el("div","m");
+      m.appendChild(el("span","st","★ "+(r.stargazers_count||0).toLocaleString()));
+      if(r.language){var lg=el("span","lang");var dot=el("span","dot");dot.style.background=LANG[r.language]||"#888";lg.appendChild(dot);lg.appendChild(document.createTextNode(r.language));m.appendChild(lg)}
+      el0.appendChild(m);
+      el0.addEventListener("click",function(){try{xemd.openLink(r.html_url)}catch(e){}});
+      list.appendChild(el0);
+    });
+  }
+  function ago(days){var d=new Date(Date.now()-days*86400000);return d.toISOString().slice(0,10)}
+  async function load(){
+    if(Date.now()-last<5000)return; last=Date.now();
+    var since=Math.max(1,Number(settings.sinceDays)||7);
+    $("q").textContent="new · "+since+"d"+(settings.language?" · "+settings.language:"");
+    try{
+      var q="created:>"+ago(since)+(settings.language?" language:"+settings.language:"")+" stars:>10";
+      var url="https://api.github.com/search/repositories?q="+encodeURIComponent(q)+"&sort=stars&order=desc&per_page="+Math.min(20,Number(settings.count)||12);
+      var res=await xemd.proxy.fetch(url,{headers:{Accept:"application/vnd.github+json"}});
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var d=await res.json();var items=d.items||[];
+      if(!items.length)throw new Error("no results");
+      cache=items;render(items);document.body.className="";
+      $("upd").textContent="updated "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    }catch(e){ if(cache){document.body.className="";$("upd").textContent="offline"} else {document.body.className="error";$("sp").style.display="none";$("msg").textContent="GitHub error: "+(e.message||e)} }
+  }
+  (async function(){
+    try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,900000);
+  })();
+</script></body></html>
