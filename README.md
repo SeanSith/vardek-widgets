@@ -11,8 +11,11 @@ responsive across every widget size the 8×2 grid supports.
 
 ## 🖼️ Showcase
 
-A full visual gallery lives in the `docs/` folder — every widget, shown at multiple sizes, with a
-click-to-zoom modal. Enable GitHub Pages on the `docs/` folder to browse it online.
+**▶︎ Live gallery: https://kevinelliott.github.io/vardek-widgets/**
+
+Every widget, shown at multiple sizes, grouped into themed sections, with live search and a
+click-to-zoom modal gallery for each. The site is static (`docs/`) — screenshots and a generated
+catalog, no dependencies.
 
 ## Install
 
