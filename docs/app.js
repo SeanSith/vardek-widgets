@@ -116,7 +116,9 @@
     strip=[];
     strip.push({img:shot(w.id,"wide"),tag:"Solo",cap:"The widget on its own"});
     (w.scenes||[]).forEach(function(sc){
-      strip.push({img:sc.file,tag:sc.label,cap:"Shown at "+sc.label+", alongside other widgets"});
+      var full=/full screen/.test(sc.label);
+      strip.push({img:sc.file,tag:full?"Full screen":sc.label,
+        cap:full?"Filling the whole 2560×720 screen":"Running at "+sc.label+", alongside other widgets"});
     });
     strip.push({img:shot(w.id,"std"),tag:"Solo",cap:"On its own · standard shape"});
     strip.push({img:shot(w.id,"compact"),tag:"Solo",cap:"On its own · compact shape"});
