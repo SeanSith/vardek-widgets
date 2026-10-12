@@ -41,7 +41,7 @@
     }
     $("vid").style.display="none";
     var img=$("img");img.onload=function(){img.classList.add("show");$("boot").classList.add("hidden")};
-    img.src=d.file+"?d="+(d.date||"");
+    img.src=d.file+"?d="+(d.date||"")+"&g="+encodeURIComponent(d.generatedAt||"");
     $("date").textContent=d.date||"";$("title").textContent=d.title||"";
     $("exp").textContent=d.explanation||"";
     $("by").textContent=d.copyright?("© "+d.copyright):"NASA APOD";
@@ -50,7 +50,7 @@
   }
   function load(){
     var s=document.createElement("script");s.src="data.js?v="+Date.now();
-    s.onload=function(){s.remove();var d=window.__APOD__;if(!d)return;var k=(d.date||"")+"|"+(d.file||"");if(k!==key){key=k;render(d)}};
+    s.onload=function(){s.remove();var d=window.__APOD__;if(!d)return;var k=(d.date||"")+"|"+(d.file||"")+"|"+(d.generatedAt||"");if(k!==key){key=k;render(d)}};
     s.onerror=function(){s.remove();if(!key)$("boot").textContent="apodd not running — see README"};
     document.head.appendChild(s);
   }
