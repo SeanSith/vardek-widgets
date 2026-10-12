@@ -6,20 +6,19 @@ explanation. Updates daily.
 ## How it works
 
 Sandboxed widgets can't load cross-origin images, so a small daemon (**apodd**)
-fetches the APOD JSON from api.nasa.gov, downloads the day's image into this
+fetches the APOD JSON, downloads the day's image into this
 widget's own `img/` folder (downscaled via `sips`), and writes `data.js`. The
 widget shows it same-origin. On "video" APOD days it shows the title/explanation
 and points you to apod.nasa.gov.
 
-## API key
+## Data source
 
-`apod.json` defaults to NASA's shared `DEMO_KEY`, which is rate-limited. Since the
-daemon only fetches once a day that's usually fine, but for reliability grab a
-free key at https://api.nasa.gov and set it:
-
-```json
-{ "apiKey": "YOUR_KEY", "maxWidth": 1600 }
-```
+Uses NASA's APOD Basic JSON feed (`science.nasa.gov/wp-json/wp/v2/apod-basic`),
+which needs no API key; the old `api.nasa.gov/planetary/apod` endpoint is being
+retired (it already returns a NASA logo placeholder). The feed is newest-first, so
+if today's entry is unusable the daemon shows the most recent good one, and if the
+feed is unreachable it re-serves the last good record (`last_good.json`).
+`apod.json` takes `maxWidth` (image downscale, default 1600); any old `apiKey` is ignored.
 
 ## Daemon
 
