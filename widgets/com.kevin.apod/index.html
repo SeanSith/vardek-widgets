@@ -44,7 +44,7 @@
     img.src=d.file+"?d="+(d.date||"")+"&g="+encodeURIComponent(d.generatedAt||"");
     $("date").textContent=d.date||"";$("title").textContent=d.title||"";
     $("exp").textContent=d.explanation||"";
-    $("by").textContent=d.copyright?("© "+d.copyright):"NASA APOD";
+    $("by").textContent=d.credit?("Credit: "+d.credit):"NASA APOD";
     document.body.classList.toggle("cap",settings.showText!==false);
     document.body.classList.toggle("kb",settings.kenBurns!==false);
   }
