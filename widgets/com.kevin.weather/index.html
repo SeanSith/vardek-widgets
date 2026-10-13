@@ -108,6 +108,6 @@
   (async function(){
     try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
     xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
-    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,600000);
+    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();
   })();
 </script></body></html>
