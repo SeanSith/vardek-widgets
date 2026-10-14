@@ -59,20 +59,34 @@
     }).join("");
     $("boot").classList.add("hidden");$("wrap").style.display="flex";
   }
+  // Polite polling: slow base rate, pause while this page is hidden, and back off
+  // exponentially on errors (adsb.lol is a shared community API that rate-limits).
+  var POLL_MS=30000,MAX_MS=300000,failures=0,timer=null,visible=true,busy=false,retryIn=0;
+  function schedule(){
+    clearTimeout(timer);
+    var ms=failures?Math.min(MAX_MS,POLL_MS*Math.pow(2,failures)):POLL_MS;
+    retryIn=failures?Math.round(ms/1000):0;
+    if(!visible)return;
+    timer=setTimeout(load,ms);
+  }
+  function loadNow(){last=0;failures=0;load()}
   async function load(){
-    if(Date.now()-last<10000)return; last=Date.now();
+    if(busy||Date.now()-last<10000)return; busy=true;last=Date.now();
     try{
       $("apt").textContent=settings.airport;
       var url="https://api.adsb.lol/v2/point/"+Number(settings.latitude)+"/"+Number(settings.longitude)+"/"+Math.min(250,Number(settings.radiusNm)||25);
       var res=await xemd.proxy.fetch(url,{headers:{Accept:"application/json"}});
       if(!res.ok)throw new Error("HTTP "+res.status);
-      var d=await res.json();render(d.ac||[]);
+      var d=await res.json();render(d.ac||[]);failures=0;retryIn=0;
       $("status").className="";$("status").textContent="adsb.lol · "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-    }catch(e){$("status").className="err";$("status").textContent="adsb: "+(e.message||e);if($("wrap").style.display==="none")$("boot").textContent="traffic data unavailable"}
+    }catch(e){failures++;$("status").className="err";$("status").textContent="adsb: "+(e.message||e)+" · retrying";if($("wrap").style.display==="none")$("boot").textContent="traffic data unavailable"}
+    finally{busy=false;schedule();if(failures&&$("status").className==="err")$("status").textContent=$("status").textContent.replace(/ · retrying.*$/," · retry in "+retryIn+"s")}
   }
   (async function(){
     try{var s=await Promise.race([xemd.settings.get(),new Promise(function(r){setTimeout(function(){r(null)},1500)})]);if(s)settings=Object.assign(settings,s)}catch(e){}
-    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);last=0;load()});
-    xemd.onRefresh(function(){last=0;load()});xemd.ready();load();setInterval(load,20000);
+    xemd.onSettingsChange(function(s){if(s)settings=Object.assign(settings,s);loadNow()});
+    xemd.onRefresh(loadNow);
+    if(xemd.onPageVisibility)xemd.onPageVisibility(function(v){visible=v;if(!v)clearTimeout(timer);else if(!failures&&Date.now()-last>POLL_MS)loadNow();else schedule()});
+    xemd.ready();load();
   })();
 </script></body></html>
