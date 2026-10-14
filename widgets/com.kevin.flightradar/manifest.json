@@ -54,8 +54,8 @@
     },
     "rangeNm": {
       "type": "number",
-      "label": "Range (nautical miles)",
-      "default": 60
+      "label": "Range (nautical miles, max 22 ≈ 25 mi)",
+      "default": 22
     },
     "showLabels": {
       "type": "boolean",

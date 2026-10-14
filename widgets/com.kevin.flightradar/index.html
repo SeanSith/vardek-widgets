@@ -39,7 +39,7 @@
   </div>
 <script type="module">
   import { xemd } from '/sdk/widget-sdk.js';
-  var settings = { latitude: 37.7749, longitude: -122.4194, rangeNm: 60, showLabels: true };
+  var settings = { latitude: 37.7749, longitude: -122.4194, rangeNm: 22, showLabels: true };
   var $ = function (id) { return document.getElementById(id); };
   var canvas = $("c"), ctx = canvas.getContext("2d");
   var W = 0, H = 0, dpr = 1, aircraft = [], lastFetch = 0, sweep = 0, err = null;
@@ -84,7 +84,7 @@
   function draw() {
     resize();
     var g = geometry(), cx = g.cx, cy = g.cy, R = g.R;
-    var range = Number(settings.rangeNm) || 60;
+    var range = Math.min(22, Number(settings.rangeNm) || 22); // ~25 statute miles
     ctx.fillStyle = "#05090a"; ctx.fillRect(0, 0, W, H);
 
     // range rings
@@ -158,29 +158,50 @@
       list.appendChild(row);
     });
     var s = $("status");
-    if (err) { s.className = "err"; s.textContent = "adsb: " + err; }
+    if (err) { s.className = "err"; s.textContent = "adsb: " + err + (retryIn ? " · retry in " + retryIn + "s" : ""); }
     else { s.className = ""; s.textContent = plotted.length + " aircraft · " + settings.latitude.toFixed(2) + "," + settings.longitude.toFixed(2) + " · " + (lastFetch ? Math.round((Date.now() - lastFetch) / 1000) + "s ago" : ""); }
     requestAnimationFrame(draw);
   }
   function esc(s) { return String(s).replace(/[<>&]/g, function (c) { return { "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]; }); }
 
+  // Polite polling: slow base rate, pause while this page is hidden, and back off
+  // exponentially on errors (adsb.lol is a shared community API that rate-limits).
+  var POLL_MS = 15000, MAX_MS = 300000, failures = 0, retryIn = 0, timer = null, visible = true, busy = false;
+  function schedule() {
+    clearTimeout(timer);
+    var ms = failures ? Math.min(MAX_MS, POLL_MS * Math.pow(2, failures)) : POLL_MS;
+    retryIn = failures ? Math.round(ms / 1000) : 0;
+    if (!visible) return;
+    timer = setTimeout(poll, ms);
+  }
+  async function poll() {
+    if (busy) return; busy = true;
+    try { await fetchData(); } finally { busy = false; schedule(); }
+  }
+  function pollNow() { lastFetch = 0; failures = 0; poll(); }
+
   async function fetchData() {
     if (Date.now() - lastFetch < 8000) return;
-    var lat = Number(settings.latitude), lon = Number(settings.longitude), rng = Math.min(250, Number(settings.rangeNm) || 60);
+    var lat = Number(settings.latitude), lon = Number(settings.longitude), rng = Math.min(22, Number(settings.rangeNm) || 22);
     try {
       var res = await xemd.proxy.fetch("https://api.adsb.lol/v2/lat/" + lat + "/lon/" + lon + "/dist/" + Math.ceil(rng), { headers: { Accept: "application/json" } });
       if (!res.ok) throw new Error("HTTP " + res.status);
       var data = await res.json();
-      aircraft = data.ac || data.aircraft || []; err = null; lastFetch = Date.now();
-    } catch (e) { err = (e.message || "fetch failed"); if (!lastFetch) lastFetch = 0; }
+      aircraft = data.ac || data.aircraft || []; err = null; lastFetch = Date.now(); failures = 0;
+    } catch (e) { err = (e.message || "fetch failed"); failures++; }
   }
 
   (async function () {
     try { var s = await Promise.race([xemd.settings.get(), new Promise(function (r) { setTimeout(function () { r(null); }, 1500); })]); if (s) settings = Object.assign(settings, s); } catch (e) {}
-    xemd.onSettingsChange(function (s) { if (s) settings = Object.assign(settings, s); lastFetch = 0; fetchData(); });
-    xemd.onRefresh(function () { lastFetch = 0; fetchData(); });
+    xemd.onSettingsChange(function (s) { if (s) settings = Object.assign(settings, s); pollNow(); });
+    xemd.onRefresh(pollNow);
+    if (xemd.onPageVisibility) xemd.onPageVisibility(function (v) {
+      visible = v;
+      if (!v) clearTimeout(timer);
+      else if (!failures && Date.now() - lastFetch > POLL_MS) pollNow(); else schedule(); // keep backoff on resume
+    });
     xemd.ready();
-    fetchData(); setInterval(fetchData, 10000);
+    poll();
     requestAnimationFrame(draw);
   })();
 </script>
