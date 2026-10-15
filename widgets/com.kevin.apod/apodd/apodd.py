@@ -8,6 +8,7 @@ Refetches only when the APOD date changes. Commands: serve | once.
 Uses NASA's APOD Basic JSON feed (no API key needed). Config ../apod.json {maxWidth}.
 """
 import hashlib, html, json, os, re, subprocess, sys, time, urllib.request
+from urllib.parse import quote, urlsplit, urlunsplit
 from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -50,8 +51,16 @@ def fetch_json(url):
         return json.loads(r.read().decode())
 
 
+def ascii_url(url):
+    """Percent-encode non-ASCII (e.g. "č") in a URL; urllib can't send it as-is."""
+    # Safe sets keep "%" and URL delimiters, so existing escapes survive (idempotent).
+    p = urlsplit(url)
+    return urlunsplit((p.scheme, p.netloc, quote(p.path, safe="/%:@!$&'()*+,;=~"),
+                       quote(p.query, safe="=&%/?:@!$'()*+,;~"), p.fragment))
+
+
 def download(url, out):
-    req = urllib.request.Request(url, headers={"User-Agent": "vardek-apodd"})
+    req = urllib.request.Request(ascii_url(url), headers={"User-Agent": "vardek-apodd"})
     with urllib.request.urlopen(req, timeout=60) as r, open(out, "wb") as f:
         f.write(r.read())
 
