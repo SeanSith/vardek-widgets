@@ -14,6 +14,10 @@
   .card .yr{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:4.6rem;line-height:1;color:var(--text)}
   .card .yr .ago{font-family:-apple-system,sans-serif;font-size:1.1rem;color:var(--dim);font-weight:500;margin-left:12px}
   .card .txt{font-size:1.55rem;line-height:1.4;margin-top:14px;max-width:42ch}
+  .card .body{display:flex;align-items:center;gap:22px}
+  .card .body .txtcol{min-width:0}
+  .card .pic{flex:0 0 auto;max-width:34%;max-height:min(210px,40vh);border-radius:8px;border:1px solid var(--border);object-fit:contain;display:none}
+  .card .pic.show{display:block}
   .dots{display:flex;gap:6px;margin-top:16px}
   .dots i{width:7px;height:7px;border-radius:50%;background:var(--border);transition:background .3s,width .3s}
   .dots i.on{background:var(--accent);width:20px;border-radius:4px}
@@ -32,7 +36,7 @@
   <div id="wrap" style="display:none">
     <div class="feature">
       <div class="date" id="date"></div>
-      <div class="card"><div class="inner" id="inner"><div class="yr" id="yr"></div><div class="txt" id="txt"></div></div>
+      <div class="card"><div class="inner" id="inner"><div class="body"><div class="txtcol"><div class="yr" id="yr"></div><div class="txt" id="txt"></div></div><img class="pic" id="pic" alt=""></div></div>
         <div class="dots" id="dots"></div></div>
     </div>
     <div class="aside" id="aside"></div>
@@ -49,14 +53,36 @@
   $("aside").addEventListener("click",function(ev){var it=ev.target.closest&&ev.target.closest(".it");if(it)openUrl(links[Number(it.dataset.i)])});
   function dayUrl(){var n=new Date();return"https://en.wikipedia.org/wiki/"+n.toLocaleDateString("en-US",{month:"long"})+"_"+n.getDate()}
   function pageUrl(e){var p=e&&e.pages&&e.pages[0],u=p&&p.content_urls&&p.content_urls.desktop&&p.content_urls.desktop.page;return u||dayUrl()}
+  // Only the "(pictured)"/"(depicted)" marker says which linked page the picture is
+  // of: take the page whose title ends the text just before it. No match = no image.
+  function pictureOf(e){
+    var t=e&&e.text||"",m=/\s*\((?:pictured|depicted)\)/i.exec(t);if(!m)return"";
+    var before=t.slice(0,m.index).toLowerCase(),best="",bestLen=0;
+    (e.pages||[]).forEach(function(p){
+      var src=p.thumbnail&&p.thumbnail.source;if(!src)return;
+      var n=(p.titles&&p.titles.normalized)||"";
+      [n,n.replace(/\s*\([^)]*\)$/,""),n.slice(n.lastIndexOf("/")+1)].forEach(function(v){
+        v=v.toLowerCase();
+        if(v&&v.length>bestLen&&before.endsWith(v)&&!/[a-z0-9\u00c0-\u024f]/i.test(before.charAt(before.length-v.length-1))){best=src;bestLen=v.length}
+      });
+    });
+    return /^https:\/\/(thumb|upload)\.wikimedia\.org\//.test(best)?best:"";
+  }
   function openUrl(u){if(/^https:\/\/en\.wikipedia\.org\//.test(u||"")){try{xemd.openLink(u)}catch(e){}}}
+  function setPic(src){
+    var img=$("pic");img.classList.remove("show");img.onload=null;img.onerror=null;
+    if(!src){img.removeAttribute("src");return}
+    img.onload=function(){img.classList.add("show")};
+    img.onerror=function(){img.classList.remove("show")};
+    img.src=src;
+  }
   function show(i){
     if(!feat.length)return;
     idx=(i+feat.length)%feat.length;var e=feat[idx];
     var inner=$("inner");inner.style.opacity="0";
     setTimeout(function(){
       $("yr").innerHTML=esc(String(e.year))+'<span class="ago">'+agoTxt(e.year)+'</span>';
-      $("txt").textContent=e.text;inner.style.opacity="1";
+      $("txt").textContent=e.text;setPic(e.img);inner.style.opacity="1";
     },320);
     var dots=$("dots").children;for(var k=0;k<dots.length;k++)dots[k].className=k===idx?"on":"";
   }
@@ -65,7 +91,7 @@
     var now=new Date();
     $("date").textContent=now.toLocaleDateString([],{month:"long",day:"numeric"});
     var src=(settings.category==="events"?d.events:d.selected)||d.selected||d.events||[];
-    feat=src.slice(0,10).map(function(e){return{year:e.year,text:e.text,url:pageUrl(e)}});
+    feat=src.slice(0,10).map(function(e){return{year:e.year,text:e.text,url:pageUrl(e),img:pictureOf(e)}});
     if(!feat.length){feat=[{year:now.getFullYear(),text:"No events found for today.",url:dayUrl()}]}
     $("dots").innerHTML=feat.map(function(){return"<i></i>"}).join("");
     idx=0;show(0);schedule();

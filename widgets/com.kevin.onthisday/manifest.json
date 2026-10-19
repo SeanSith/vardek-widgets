@@ -1,13 +1,15 @@
 {
   "id": "com.kevin.onthisday",
   "name": "On This Day",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "entry": "index.html",
   "subscriptions": [],
   "refreshInterval": 3600,
   "permissions": {
     "proxy": [
-      "https://en.wikipedia.org/**"
+      "https://en.wikipedia.org/**",
+      "https://upload.wikimedia.org/**",
+      "https://thumb.wikimedia.org/**"
     ],
     "secrets": []
   },
