@@ -20,3 +20,6 @@ widgets/com.kevin.cocktail/img/
 widgets/com.kevin.recipe/img/
 widgets/**/.state.json
 widgets/**/last_good.json
+
+# session handoff notes (local only)
+docs/handoffs/
